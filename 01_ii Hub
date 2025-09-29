@@ -1,0 +1,1096 @@
+-- Ultra Hub v2.0 (single-file LocalScript)
+-- Paste into StarterPlayerScripts or StarterGui (LocalScript)
+-- Author: Generated (you). Upgraded: Adds pages, scrollable content, settings, theme editor, autosave, mobile scaling, fixed minimize, single-press run buttons.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local CoreGui = game:GetService("CoreGui")
+
+-- ======= Config / Defaults =======
+local DEFAULT_THEME = {
+    Accent = Color3.fromRGB(98, 53, 255),   -- default cobalt-ish purple
+    Background = Color3.fromRGB(15,15,20),
+    Panel = Color3.fromRGB(26,26,32),
+    Text = Color3.fromRGB(235,235,240),
+    Muted = Color3.fromRGB(160,160,170),
+    Radius = UDim.new(0, 12),
+    Shadows = true
+}
+
+local ANIM = {
+    Time = 0.18,
+    Style = Enum.EasingStyle.Quad,
+    Direction = Enum.EasingDirection.Out
+}
+
+-- persistence filename (if writefile/readfile are available in executor env)
+local SETTINGS_FILE = "ultrahub_settings.json"
+
+-- ======= Helpers =======
+local function safe_pcall(fn, ...)
+    local ok, res = pcall(fn, ...)
+    return ok, res
+end
+
+local function tw(instance, props, t)
+    t = t or ANIM.Time
+    return TweenService:Create(instance, TweenInfo.new(t, ANIM.Style, ANIM.Direction), props)
+end
+
+local function addRound(parent, radius)
+    local rc = Instance.new("UICorner")
+    rc.CornerRadius = radius or DEFAULT_THEME.Radius
+    rc.Parent = parent
+    return rc
+end
+
+local function addStroke(parent, color, thickness)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = color or Color3.fromRGB(0,0,0)
+    stroke.Thickness = thickness or 1
+    stroke.Parent = parent
+    return stroke
+end
+
+local function cloneChildrenTo(parent, children)
+    for _,c in ipairs(children) do
+        local cc = c:Clone()
+        cc.Parent = parent
+    end
+end
+
+-- ======= Load / Save settings =======
+local Settings = {
+    AutoExecute = false,
+    Theme = {
+        Accent = DEFAULT_THEME.Accent,
+        Background = DEFAULT_THEME.Background,
+        Panel = DEFAULT_THEME.Panel,
+        Text = DEFAULT_THEME.Text,
+        Muted = DEFAULT_THEME.Muted
+    },
+    WalkSpeed = 16,
+    JumpPower = 50
+}
+
+local function loadSettings()
+    if typeof(writefile) == "function" and typeof(readfile) == "function" then
+        local ok, content = pcall(function() return readfile(SETTINGS_FILE) end)
+        if ok and content and #content > 0 then
+            local ok2, parsed = pcall(function() return HttpService:JSONDecode(content) end)
+            if ok2 and type(parsed) == "table" then
+                -- merge
+                for k,v in pairs(parsed) do Settings[k] = v end
+                -- convert color tables back to Color3
+                if Settings.Theme and type(Settings.Theme) == "table" then
+                    for tk, tv in pairs(Settings.Theme) do
+                        if type(tv) == "table" and tv.r then
+                            Settings.Theme[tk] = Color3.new(tv.r, tv.g, tv.b)
+                        end
+                    end
+                end
+            end
+        end
+    else
+        -- fallback: try _G persistence if available
+        if _G.UltraHubSettings then
+            for k,v in pairs(_G.UltraHubSettings) do Settings[k] = v end
+        end
+    end
+end
+
+local function saveSettings()
+    local copy = {
+        AutoExecute = Settings.AutoExecute,
+        WalkSpeed = Settings.WalkSpeed,
+        JumpPower = Settings.JumpPower,
+        Theme = {}
+    }
+    for k,v in pairs(Settings.Theme) do
+        local c = v
+        copy.Theme[k] = { r = c.R, g = c.G, b = c.B }
+    end
+    if typeof(writefile) == "function" and typeof(readfile) == "function" then
+        local ok, err = pcall(function()
+            writefile(SETTINGS_FILE, HttpService:JSONEncode(copy))
+        end)
+        if not ok then warn("UltraHub: failed to write settings:", err) end
+    else
+        _G.UltraHubSettings = copy
+    end
+end
+
+-- load at start
+loadSettings()
+
+-- ======= Clean up old hub if exists =======
+if PlayerGui:FindFirstChild("UltraHubGui") then
+    PlayerGui.UltraHubGui:Destroy()
+end
+
+-- ======= UI Creation =======
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "UltraHubGui"
+screenGui.DisplayOrder = 999
+screenGui.IgnoreGuiInset = true
+screenGui.ResetOnSpawn = false
+screenGui.Parent = PlayerGui
+
+-- scaling for mobile & small screens
+local uiScale = Instance.new("UIScale")
+uiScale.Parent = screenGui
+-- choose scale based on viewport
+local function updateScale()
+    local h = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.Y or 800
+    local scale = 1
+    if h <= 720 then scale = 0.85 end
+    if h <= 600 then scale = 0.75 end
+    if h <= 400 then scale = 0.6 end
+    uiScale.Scale = scale
+end
+updateScale()
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function() updateScale() end)
+if workspace.CurrentCamera then
+    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+end
+
+-- Dim background
+local dim = Instance.new("Frame")
+dim.Name = "Dim"
+dim.AnchorPoint = Vector2.new(0.5,0.5)
+dim.Size = UDim2.new(1,0,1,0)
+dim.Position = UDim2.new(0.5, 0.5, 0.5, 0)
+dim.BackgroundColor3 = Color3.fromRGB(0,0,0)
+dim.BackgroundTransparency = 0.6
+dim.Parent = screenGui
+
+-- Main window
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0, 920, 0, 580)
+main.Position = UDim2.new(0.5, 0, 0.5, 0)
+main.AnchorPoint = Vector2.new(0.5, 0.5)
+main.BackgroundColor3 = Settings.Theme and Settings.Theme.Background or DEFAULT_THEME.Background
+main.Parent = screenGui
+addRound(main, DEFAULT_THEME.Radius)
+addStroke(main, Color3.fromRGB(0,0,0), 1)
+
+-- Drop shadow (simple)
+local function addShadow(parent)
+    if DEFAULT_THEME.Shadows then
+        local shadow = Instance.new("ImageLabel")
+        shadow.Name = "Shadow"
+        shadow.BackgroundTransparency = 1
+        shadow.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+        shadow.Position = UDim2.new(0, -8, 0, -8)
+        shadow.Size = UDim2.new(1, 16, 1, 16)
+        shadow.ZIndex = 0
+        shadow.ImageTransparency = 0.85
+        shadow.Parent = parent
+    end
+end
+addShadow(main)
+
+-- Header
+local header = Instance.new("Frame")
+header.Name = "Header"
+header.Size = UDim2.new(1, 0, 0, 68)
+header.BackgroundColor3 = Settings.Theme and Settings.Theme.Panel or DEFAULT_THEME.Panel
+header.Parent = main
+addRound(header, UDim.new(0, 12))
+
+local title = Instance.new("TextLabel")
+title.Name = "Title"
+title.Size = UDim2.new(0, 420, 1, 0)
+title.Position = UDim2.new(0, 18, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "ULTRA HUB"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = header
+
+local subtitle = Instance.new("TextLabel")
+subtitle.Name = "Subtitle"
+subtitle.Size = UDim2.new(0, 520, 1, 0)
+subtitle.Position = UDim2.new(0, 18, 0, 28)
+subtitle.BackgroundTransparency = 1
+subtitle.Text = "01_ii SPT Hub — built from scratch. Use the sidebar to open pages."
+subtitle.Font = Enum.Font.Gotham
+subtitle.TextSize = 13
+subtitle.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
+subtitle.TextXAlignment = Enum.TextXAlignment.Left
+subtitle.Parent = header
+
+-- Close + minimize
+local closeBtn = Instance.new("TextButton")
+closeBtn.Name = "Close"
+closeBtn.Size = UDim2.new(0, 36, 0, 36)
+closeBtn.Position = UDim2.new(1, -52, 0, 16)
+closeBtn.BackgroundColor3 = Settings.Theme and Settings.Theme.Panel or DEFAULT_THEME.Panel
+closeBtn.Text = "✕"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 18
+closeBtn.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
+closeBtn.Parent = header
+addRound(closeBtn, UDim.new(0, 8))
+addStroke(closeBtn, Color3.fromRGB(0,0,0), 1)
+
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Name = "Minimize"
+minimizeBtn.Size = UDim2.new(0, 36, 0, 36)
+minimizeBtn.Position = UDim2.new(1, -100, 0, 16)
+minimizeBtn.BackgroundColor3 = Settings.Theme and Settings.Theme.Panel or DEFAULT_THEME.Panel
+minimizeBtn.Text = "–"
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.TextSize = 20
+minimizeBtn.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
+minimizeBtn.Parent = header
+addRound(minimizeBtn, UDim.new(0, 8))
+addStroke(minimizeBtn, Color3.fromRGB(0,0,0), 1)
+
+-- Left sidebar
+local sidebar = Instance.new("Frame")
+sidebar.Name = "Sidebar"
+sidebar.Size = UDim2.new(0, 220, 1, -92)
+sidebar.Position = UDim2.new(0, 0, 0, 68)
+sidebar.BackgroundColor3 = Settings.Theme and Settings.Theme.Panel or DEFAULT_THEME.Panel
+sidebar.Parent = main
+addRound(sidebar, UDim.new(0, 12))
+
+local sideLayout = Instance.new("UIListLayout")
+sideLayout.Padding = UDim.new(0, 8)
+sideLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+sideLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+sideLayout.SortOrder = Enum.SortOrder.LayoutOrder
+sideLayout.Parent = sidebar
+
+local sidePadding = Instance.new("UIPadding")
+sidePadding.PaddingTop = UDim.new(0, 18)
+sidePadding.PaddingLeft = UDim.new(0, 12)
+sidePadding.PaddingRight = UDim.new(0, 12)
+sidePadding.Parent = sidebar
+
+-- Search box
+local searchBox = Instance.new("TextBox")
+searchBox.Name = "Search"
+searchBox.Size = UDim2.new(1, -24, 0, 36)
+searchBox.BackgroundColor3 = Color3.fromRGB(22,22,26)
+searchBox.PlaceholderText = "Search..."
+searchBox.Text = ""
+searchBox.ClearTextOnFocus = false
+searchBox.Font = Enum.Font.Gotham
+searchBox.TextSize = 14
+searchBox.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+searchBox.Parent = sidebar
+addRound(searchBox, UDim.new(0, 8))
+addStroke(searchBox, Color3.fromRGB(0,0,0), 1)
+
+-- container for page buttons (scrollable)
+local buttonsHolder = Instance.new("ScrollingFrame")
+buttonsHolder.Name = "Buttons"
+buttonsHolder.Size = UDim2.new(1, 0, 1, -86)
+buttonsHolder.BackgroundTransparency = 1
+buttonsHolder.ScrollBarThickness = 6
+buttonsHolder.CanvasSize = UDim2.new(0,0,0,0)
+buttonsHolder.AutomaticCanvasSize = Enum.AutomaticSize.Y
+buttonsHolder.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+buttonsHolder.Parent = sidebar
+
+local buttonsLayout = Instance.new("UIListLayout")
+buttonsLayout.Padding = UDim.new(0, 10)
+buttonsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+buttonsLayout.Parent = buttonsHolder
+
+-- Right main content area
+local content = Instance.new("Frame")
+content.Name = "Content"
+content.Size = UDim2.new(1, -240, 1, -92)
+content.Position = UDim2.new(0, 240, 0, 68)
+content.BackgroundColor3 = Settings.Theme and Settings.Theme.Panel or DEFAULT_THEME.Panel
+content.Parent = main
+addRound(content, UDim.new(0, 12))
+addStroke(content, Color3.fromRGB(0,0,0), 1)
+
+local contentPadding = Instance.new("UIPadding")
+contentPadding.PaddingTop = UDim.new(0, 18)
+contentPadding.PaddingLeft = UDim.new(0, 18)
+contentPadding.PaddingRight = UDim.new(0, 18)
+contentPadding.Parent = content
+
+local pageTitle = Instance.new("TextLabel")
+pageTitle.Name = "PageTitle"
+pageTitle.Size = UDim2.new(1, 0, 0, 36)
+pageTitle.BackgroundTransparency = 1
+pageTitle.Font = Enum.Font.GothamBold
+pageTitle.TextSize = 18
+pageTitle.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+pageTitle.Text = "Welcome"
+pageTitle.TextXAlignment = Enum.TextXAlignment.Left
+pageTitle.Parent = content
+
+local pageArea = Instance.new("Frame")
+pageArea.Name = "PageArea"
+pageArea.Size = UDim2.new(1, 0, 1, -56)
+pageArea.Position = UDim2.new(0, 0, 0, 40)
+pageArea.BackgroundTransparency = 1
+pageArea.ClipsDescendants = true
+pageArea.Parent = content
+
+-- Pages system
+local Pages = {}
+local currentPageName = nil
+
+local function createPage(name)
+    local p = Instance.new("ScrollingFrame")
+    p.Name = name
+    p.Size = UDim2.new(1, 0, 1, 0)
+    p.Position = UDim2.new(1, 0, 0, 0) -- off-screen
+    p.BackgroundTransparency = 1
+    p.ScrollBarThickness = 8
+    p.CanvasSize = UDim2.new(0,0,0,0)
+    p.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    p.Parent = pageArea
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 10)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = p
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop = UDim.new(0, 6)
+    padding.PaddingLeft = UDim.new(0, 6)
+    padding.PaddingRight = UDim.new(0, 6)
+    padding.Parent = p
+
+    Pages[name] = p
+    return p
+end
+
+local function showPage(name)
+    if currentPageName == name then return end
+    local old = currentPageName and Pages[currentPageName] or nil
+    local new = Pages[name]
+    if not new then return end
+    pageTitle.Text = name
+    currentPageName = name
+
+    if old then
+        tw(old, {Position = UDim2.new(-1,0,0,0)}):Play()
+    end
+    new.Position = UDim2.new(1,0,0,0)
+    tw(new, {Position = UDim2.new(0,0,0,0)}):Play()
+    if old then
+        delay(ANIM.Time + 0.02, function()
+            if old and old.Parent then old.Position = UDim2.new(1,0,0,0) end
+        end)
+    end
+end
+
+-- Create a sidebar button (single-press to open page)
+local function createSidebarButton(titleText, order)
+    local btnHolder = Instance.new("Frame")
+    btnHolder.Name = titleText .. "Btn"
+    btnHolder.Size = UDim2.new(1, 0, 0, 44)
+    btnHolder.BackgroundTransparency = 1
+    btnHolder.LayoutOrder = order or 1
+    btnHolder.Parent = buttonsHolder
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(18,18,22)
+    btn.AutoButtonColor = false
+    btn.Text = ""
+    btn.Parent = btnHolder
+    addRound(btn, UDim.new(0, 10))
+    addStroke(btn, Color3.fromRGB(0,0,0), 1)
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -70, 1, 0)
+    label.Position = UDim2.new(0, 12, 0, 0)
+    label.BackgroundTransparency = 1
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 15
+    label.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+    label.Text = titleText
+    label.Parent = btn
+
+    local sub = Instance.new("TextLabel")
+    sub.Size = UDim2.new(1, -70, 1, 0)
+    sub.Position = UDim2.new(0, 12, 0, 18)
+    sub.BackgroundTransparency = 1
+    sub.TextXAlignment = Enum.TextXAlignment.Left
+    sub.Font = Enum.Font.Gotham
+    sub.TextSize = 11
+    sub.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
+    sub.Text = "Open " .. titleText
+    sub.Parent = btn
+
+    -- small accent bar
+    local accent = Instance.new("Frame")
+    accent.Size = UDim2.new(0, 6, 1, -8)
+    accent.Position = UDim2.new(1, -14, 0, 4)
+    accent.AnchorPoint = Vector2.new(1, 0)
+    accent.BackgroundColor3 = Settings.Theme and Settings.Theme.Accent or DEFAULT_THEME.Accent
+    accent.Parent = btn
+    addRound(accent, UDim.new(0, 6))
+    accent.Visible = false
+
+    -- hover effects
+    btn.MouseEnter:Connect(function()
+        tw(btn, {BackgroundColor3 = Color3.fromRGB(22,22,28)}):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        tw(btn, {BackgroundColor3 = Color3.fromRGB(18,18,22)}):Play()
+    end)
+
+    -- click -> show page
+    btn.MouseButton1Click:Connect(function()
+        showPage(titleText)
+        -- animate accent
+        for _, child in ipairs(buttonsHolder:GetChildren()) do
+            local a = child:FindFirstChildWhichIsA("TextButton") and child:FindFirstChildWhichIsA("TextButton"):FindFirstChildWhichIsA("Frame")
+            if a then a.Visible = false end
+        end
+        accent.Visible = true
+        tw(accent, {Size = UDim2.new(0, 6, 1, -8)}):Play()
+    end)
+
+    return {
+        Holder = btnHolder,
+        Button = btn,
+        SetSubText = function(txt) sub.Text = txt end,
+        SetAccent = function(on)
+            accent.Visible = on
+        end
+    }
+end
+
+-- Toggle control helper (keeps from original)
+local function createToggle(labelText, initial)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 46)
+    row.BackgroundTransparency = 1
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0.6, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 15
+    lbl.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = row
+
+    local togg = Instance.new("Frame")
+    togg.Size = UDim2.new(0, 58, 0, 28)
+    togg.AnchorPoint = Vector2.new(1, 0)
+    togg.Position = UDim2.new(1, -6, 0, 8)
+    togg.BackgroundColor3 = Color3.fromRGB(40,40,46)
+    addRound(togg, UDim.new(0, 14))
+    togg.Parent = row
+
+    local circle = Instance.new("Frame")
+    circle.Size = UDim2.new(0, 24, 0, 24)
+    circle.Position = UDim2.new(0, 4, 0, 2)
+    circle.BackgroundColor3 = Color3.fromRGB(230,230,230)
+    addRound(circle, UDim.new(0, 12))
+    circle.Parent = togg
+
+    local state = initial and true or false
+    local function setState(v)
+        state = not not v
+        if state then
+            tw(togg, {BackgroundColor3 = Settings.Theme and Settings.Theme.Accent or DEFAULT_THEME.Accent}):Play()
+            tw(circle, {Position = UDim2.new(1, -28, 0, 2)}):Play()
+            circle.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        else
+            tw(togg, {BackgroundColor3 = Color3.fromRGB(40,40,46)}):Play()
+            tw(circle, {Position = UDim2.new(0, 4, 0, 2)}):Play()
+            circle.BackgroundColor3 = Color3.fromRGB(230,230,230)
+        end
+    end
+
+    togg.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            setState(not state)
+        end
+    end)
+
+    setState(state)
+
+    return row, function() return state end, setState
+end
+
+-- Action button helper (single press) that fetches a URL and runs it (loadstring)
+local function createActionButton(textLabel, url)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 48)
+    row.BackgroundTransparency = 1
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 160, 1, 0)
+    btn.Position = UDim2.new(0, 0, 0, 0)
+    btn.BackgroundColor3 = Settings.Theme and Settings.Theme.Accent or DEFAULT_THEME.Accent
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Text = textLabel
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 14
+    btn.Parent = row
+    addRound(btn, UDim.new(0, 10))
+    addStroke(btn, Color3.fromRGB(0,0,0), 1)
+
+    local running = false
+    btn.MouseButton1Click:Connect(function()
+        -- single press: fetch & run
+        if running then return end
+        running = true
+        local oldText = btn.Text
+        btn.Text = "Running..."
+        btn.BackgroundColor3 = Color3.fromRGB(120,120,120)
+        spawn(function()
+            -- attempt HttpGet then loadstring (varies by executor)
+            local ok, res = pcall(function()
+                if type(url) ~= "string" then error("Invalid URL") end
+                -- allow raw github URLs to be used directly; user provided full URLs.
+                if typeof(game.HttpGet) == "function" then
+                    -- older style
+                end
+                local content
+                local ok2, err2 = pcall(function()
+                    content = game:HttpGet(url, true)
+                end)
+                if not ok2 then
+                    error("HttpGet failed: "..tostring(err2))
+                end
+                -- try loadstring and run
+                local f, err = loadstring(content)
+                if not f then
+                    error("loadstring failed: "..tostring(err))
+                end
+                -- run protected
+                local ran, rerr = pcall(function() f() end)
+                if not ran then error("remote script error: "..tostring(rerr)) end
+                return true
+            end)
+            if ok then
+                -- success
+                btn.Text = "Done"
+                tw(btn, {Size = UDim2.new(0, 160, 1, 0)}, 0.12):Play()
+                wait(0.8)
+                btn.Text = oldText
+                btn.BackgroundColor3 = Settings.Theme and Settings.Theme.Accent or DEFAULT_THEME.Accent
+            else
+                warn("[UltraHub] Action failed:", res)
+                btn.Text = "Error"
+                btn.BackgroundColor3 = Color3.fromRGB(160,50,50)
+                wait(1.2)
+                btn.Text = oldText
+                btn.BackgroundColor3 = Settings.Theme and Settings.Theme.Accent or DEFAULT_THEME.Accent
+            end
+            running = false
+        end)
+    end)
+
+    return row
+end
+
+-- ======= Dock pages & content per user spec =======
+
+-- Welcome page
+local pageWelcome = createPage("Welcome")
+local welcomeText = Instance.new("TextLabel")
+welcomeText.Size = UDim2.new(1, -24, 0, 120)
+welcomeText.BackgroundTransparency = 1
+welcomeText.TextWrapped = true
+welcomeText.TextXAlignment = Enum.TextXAlignment.Left
+welcomeText.Font = Enum.Font.Gotham
+welcomeText.TextSize = 14
+welcomeText.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
+welcomeText.Text = "Welcome to the 01_ii SPT Hub, built from scratch, cleanest hub yet, most overpowered ever!! To begin using the hub, start with getting a base with the button below!"
+welcomeText.Parent = pageWelcome
+
+local getBaseBtn = createActionButton("Get Base", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Get%20Base%20V3")
+getBaseBtn.LayoutOrder = 5
+getBaseBtn.Parent = pageWelcome
+
+-- Tools page (lots of single-press action buttons)
+local toolsPage = createPage("Tool Scripts")
+local toolsHeader = Instance.new("TextLabel")
+toolsHeader.Size = UDim2.new(1, -24, 0, 26)
+toolsHeader.BackgroundTransparency = 1
+toolsHeader.Font = Enum.Font.GothamBold
+toolsHeader.TextSize = 16
+toolsHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+toolsHeader.TextXAlignment = Enum.TextXAlignment.Left
+toolsHeader.Text = "Tool Scripts"
+toolsHeader.Parent = toolsPage
+
+local tools = {
+    {"Get Tools V9", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Get%20Tools%20V9.lua"},
+    {"Use Tools V10", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Use%20Tools%20V10"},
+    {"No Cooldown V16", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/No%20Cooldown%20V16"},
+    {"Insta-Kill V7", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Insta-Kill%20V7"},
+    {"Reach", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Reach"},
+    {"Kill Aura V2", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Kill%20Aura%20V2"},
+    {"Float Tools", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Float%20Tools%20V2"},
+    {"Fly Tools", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Fly%20Tools"},
+    {"Grip Tools", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Grip%20Tools"}
+}
+for i, t in ipairs(tools) do
+    local row = createActionButton(t[1], t[2])
+    row.LayoutOrder = 10 + i
+    row.Parent = toolsPage
+end
+
+-- Player Scripts page
+local playerPage = createPage("Player Scripts")
+local pHeader = Instance.new("TextLabel")
+pHeader.Size = UDim2.new(1, -24, 0, 26)
+pHeader.BackgroundTransparency = 1
+pHeader.Font = Enum.Font.GothamBold
+pHeader.TextSize = 16
+pHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+pHeader.TextXAlignment = Enum.TextXAlignment.Left
+pHeader.Text = "Player Scripts"
+pHeader.Parent = playerPage
+
+local playerScripts = {
+    {"Respawn V11", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Respawn%20V11.lua"},
+    {"Loopbring", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Loopbring%20V6.lua"},
+    {"Damage", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Damage"},
+    {"OP Anti-Lag", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Anti-Lag%20V5"},
+    {"Infinite Yield", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"}
+}
+for i,t in ipairs(playerScripts) do
+    local row = createActionButton(t[1], t[2])
+    row.LayoutOrder = 10 + i
+    row.Parent = playerPage
+end
+
+-- Other Scripts page
+local otherPage = createPage("Other Scripts")
+local oHeader = Instance.new("TextLabel")
+oHeader.Size = UDim2.new(1, -24, 0, 26)
+oHeader.BackgroundTransparency = 1
+oHeader.Font = Enum.Font.GothamBold
+oHeader.TextSize = 16
+oHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+oHeader.TextXAlignment = Enum.TextXAlignment.Left
+oHeader.Text = "Other Scripts"
+oHeader.Parent = otherPage
+
+local otherScripts = {
+    {"Lag Server", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Lag%20Server"},
+    {"Perma-Death", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/God%20Mode.lua"},
+    {"Walking God Mode", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Walking%20God%20Mode"},
+    {"Emote GUI", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/UGC%20Emotes"},
+    {"Axe Smash Shield", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Axe%20Smash%20Spam"},
+    {"Axe Smash Trap", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Axe%20Smash%20Trap"}
+}
+for i,t in ipairs(otherScripts) do
+    local row = createActionButton(t[1], t[2])
+    row.LayoutOrder = 10 + i
+    row.Parent = otherPage
+end
+
+-- Updates page (scrollable text area where you can edit updates)
+local updatesPage = createPage("Updates")
+local updatesHeader = Instance.new("TextLabel")
+updatesHeader.Size = UDim2.new(1, -24, 0, 26)
+updatesHeader.BackgroundTransparency = 1
+updatesHeader.Font = Enum.Font.GothamBold
+updatesHeader.TextSize = 16
+updatesHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+updatesHeader.TextXAlignment = Enum.TextXAlignment.Left
+updatesHeader.Text = "Updates"
+updatesHeader.Parent = updatesPage
+
+-- editable TextBox inside a scrolling frame
+local updatesBox = Instance.new("TextBox")
+updatesBox.Size = UDim2.new(1, -12, 0, 220)
+updatesBox.BackgroundColor3 = Color3.fromRGB(18,18,22)
+updatesBox.TextWrapped = true
+updatesBox.ClearTextOnFocus = false
+updatesBox.Text = "Changelog:\n- Ultra Hub v2.0\n- Pages added\n- Theme editor\n- Mobile scaling\n\nWrite any hub updates here."
+updatesBox.TextXAlignment = Enum.TextXAlignment.Left
+updatesBox.TextYAlignment = Enum.TextYAlignment.Top
+updatesBox.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+updatesBox.Font = Enum.Font.Gotham
+updatesBox.TextSize = 14
+updatesBox.MultiLine = true
+updatesBox.Parent = updatesPage
+addRound(updatesBox, UDim.new(0,8))
+addStroke(updatesBox, Color3.fromRGB(0,0,0), 1)
+updatesBox.ClearTextOnFocus = false
+
+-- Settings page
+local settingsPage = createPage("Settings")
+local sHeader = Instance.new("TextLabel")
+sHeader.Size = UDim2.new(1, -24, 0, 26)
+sHeader.BackgroundTransparency = 1
+sHeader.Font = Enum.Font.GothamBold
+sHeader.TextSize = 16
+sHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+sHeader.TextXAlignment = Enum.TextXAlignment.Left
+sHeader.Text = "Appearance & Behavior"
+sHeader.Parent = settingsPage
+
+-- Auto execute toggle
+local autoRow, getAutoState, setAutoState = createToggle("Auto Execute Hub on Rejoin", Settings.AutoExecute)
+autoRow.LayoutOrder = 2
+autoRow.Parent = settingsPage
+-- hook change
+do
+    -- when toggled, update Settings.AutoExecute and save
+    local function pollToggle()
+        Settings.AutoExecute = getAutoState()
+        saveSettings()
+    end
+    -- naive monitoring: set input to toggle already wired; add a small loop to watch changed state
+    spawn(function()
+        while settingsPage.Parent do
+            pollToggle()
+            wait(0.6)
+        end
+    end)
+end
+
+-- WalkSpeed & JumpPower sliders
+local function createSlider(labelText, min, max, initial)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 56)
+    row.BackgroundTransparency = 1
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0.6, 0, 0, 18)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 14
+    lbl.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = row
+
+    local valueLbl = Instance.new("TextLabel")
+    valueLbl.Size = UDim2.new(0.4, -6, 0, 18)
+    valueLbl.Position = UDim2.new(0.6, 6, 0, 0)
+    valueLbl.BackgroundTransparency = 1
+    valueLbl.Text = tostring(initial)
+    valueLbl.Font = Enum.Font.Gotham
+    valueLbl.TextSize = 14
+    valueLbl.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
+    valueLbl.TextXAlignment = Enum.TextXAlignment.Right
+    valueLbl.Parent = row
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, 0, 0, 14)
+    bar.Position = UDim2.new(0, 0, 0, 28)
+    bar.BackgroundColor3 = Color3.fromRGB(40,40,46)
+    bar.Parent = row
+    addRound(bar, UDim.new(0, 8))
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((initial - min)/(max - min), 0, 1, 0)
+    fill.BackgroundColor3 = Settings.Theme and Settings.Theme.Accent or DEFAULT_THEME.Accent
+    fill.Parent = bar
+    addRound(fill, UDim.new(0, 8))
+
+    local dragging = false
+    local function setToPercent(p)
+        p = math.clamp(p, 0, 1)
+        fill.Size = UDim2.new(p, 0, 1, 0)
+        local val = math.floor(min + p * (max - min) + 0.5)
+        valueLbl.Text = tostring(val)
+        return val
+    end
+
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            local absPos = UserInputService:GetMouseLocation()
+            -- capture change
+            local function update()
+                local barPos = bar.AbsolutePosition
+                local barSize = bar.AbsoluteSize
+                local mouseX = UserInputService:GetMouseLocation().X
+                local p = (mouseX - barPos.X) / barSize.X
+                local value = setToPercent(p)
+                return value
+            end
+            local conn
+            conn = UserInputService.InputChanged:Connect(function()
+                if dragging then
+                    update()
+                end
+            end)
+            repeat
+                update()
+                task.wait()
+            until not dragging
+            conn:Disconnect()
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+
+    -- initial
+    setToPercent((initial - min)/(max - min))
+
+    return row, function() return tonumber(valueLbl.Text) end
+end
+
+local walkRow, getWalkVal = createSlider("Player WalkSpeed", 8, 100, Settings.WalkSpeed or 16)
+walkRow.LayoutOrder = 10
+walkRow.Parent = settingsPage
+
+local jumpRow, getJumpVal = createSlider("Player JumpPower", 20, 200, Settings.JumpPower or 50)
+jumpRow.LayoutOrder = 11
+jumpRow.Parent = settingsPage
+
+-- Apply slider changes to local player's humanoid
+spawn(function()
+    while true do
+        local ws = getWalkVal()
+        local jp = getJumpVal()
+        -- update Settings and apply to character if exists
+        Settings.WalkSpeed = ws
+        Settings.JumpPower = jp
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChildWhichIsA("Humanoid") then
+            local hum = char:FindFirstChildWhichIsA("Humanoid")
+            if hum then
+                -- apply (Roblox uses WalkSpeed & JumpPower)
+                pcall(function()
+                    hum.WalkSpeed = ws
+                    hum.JumpPower = jp
+                end)
+            end
+        end
+        saveSettings()
+        task.wait(0.6)
+    end
+end)
+
+-- Theme editor: presets + simple RGB fields
+local themeHeader = Instance.new("TextLabel")
+themeHeader.Size = UDim2.new(1, -24, 0, 22)
+themeHeader.BackgroundTransparency = 1
+themeHeader.Font = Enum.Font.GothamBold
+themeHeader.TextSize = 14
+themeHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+themeHeader.TextXAlignment = Enum.TextXAlignment.Left
+themeHeader.Text = "Theme"
+themeHeader.Parent = settingsPage
+
+local presetsRow = Instance.new("Frame")
+presetsRow.Size = UDim2.new(1, 0, 0, 36)
+presetsRow.BackgroundTransparency = 1
+presetsRow.LayoutOrder = 20
+presetsRow.Parent = settingsPage
+
+local function addPreset(name, accent, background, panel, text, muted)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, 110, 1, 0)
+    b.BackgroundColor3 = panel
+    b.Text = name
+    b.Font = Enum.Font.Gotham
+    b.TextSize = 12
+    b.TextColor3 = text
+    b.Parent = presetsRow
+    addRound(b, UDim.new(0, 8))
+    b.MouseButton1Click:Connect(function()
+        Settings.Theme.Accent = accent or Settings.Theme.Accent
+        Settings.Theme.Background = background or Settings.Theme.Background
+        Settings.Theme.Panel = panel or Settings.Theme.Panel
+        Settings.Theme.Text = text or Settings.Theme.Text
+        Settings.Theme.Muted = muted or Settings.Theme.Muted
+        saveSettings()
+        -- apply immediately
+        main.BackgroundColor3 = Settings.Theme.Background
+        header.BackgroundColor3 = Settings.Theme.Panel
+        sidebar.BackgroundColor3 = Settings.Theme.Panel
+        content.BackgroundColor3 = Settings.Theme.Panel
+        title.TextColor3 = Settings.Theme.Text
+        pageTitle.TextColor3 = Settings.Theme.Text
+        subtitle.TextColor3 = Settings.Theme.Muted
+    end)
+end
+
+-- default cobalt/navy preset
+addPreset("Cobalt", Color3.fromRGB(38, 100, 255), Color3.fromRGB(10, 12, 20), Color3.fromRGB(26,26,32), Color3.fromRGB(235,235,240), Color3.fromRGB(160,160,170))
+addPreset("Purple", Color3.fromRGB(98,53,255), Color3.fromRGB(15,15,20), Color3.fromRGB(26,26,32), Color3.fromRGB(235,235,240), Color3.fromRGB(160,160,170))
+addPreset("Black", Color3.fromRGB(80,80,80), Color3.fromRGB(8,8,10), Color3.fromRGB(20,20,22), Color3.fromRGB(230,230,230), Color3.fromRGB(140,140,140))
+
+-- restore defaults button
+local restoreBtn = Instance.new("TextButton")
+restoreBtn.Size = UDim2.new(0, 140, 0, 36)
+restoreBtn.Position = UDim2.new(0, 0, 0, 0)
+restoreBtn.Text = "Restore Defaults"
+restoreBtn.Font = Enum.Font.Gotham
+restoreBtn.TextSize = 14
+restoreBtn.Parent = settingsPage
+restoreBtn.LayoutOrder = 30
+addRound(restoreBtn, UDim.new(0, 8))
+restoreBtn.MouseButton1Click:Connect(function()
+    Settings.Theme = {
+        Accent = DEFAULT_THEME.Accent,
+        Background = DEFAULT_THEME.Background,
+        Panel = DEFAULT_THEME.Panel,
+        Text = DEFAULT_THEME.Text,
+        Muted = DEFAULT_THEME.Muted
+    }
+    Settings.WalkSpeed = 16
+    Settings.JumpPower = 50
+    saveSettings()
+    -- apply
+    main.BackgroundColor3 = Settings.Theme.Background
+    header.BackgroundColor3 = Settings.Theme.Panel
+    sidebar.BackgroundColor3 = Settings.Theme.Panel
+    content.BackgroundColor3 = Settings.Theme.Panel
+    title.TextColor3 = Settings.Theme.Text
+    pageTitle.TextColor3 = Settings.Theme.Text
+    subtitle.TextColor3 = Settings.Theme.Muted
+end)
+
+-- ======= Build sidebar buttons (in same order as pages) =======
+local btnWelcome = createSidebarButton("Welcome", 1); btnWelcome.SetAccent(true)
+local btnTools = createSidebarButton("Tool Scripts", 2)
+local btnPlayer = createSidebarButton("Player Scripts", 3)
+local btnOther = createSidebarButton("Other Scripts", 4)
+local btnUpdates = createSidebarButton("Updates", 5)
+local btnSettings = createSidebarButton("Settings", 6)
+
+-- populate initial accents and show default page
+showPage("Welcome")
+
+-- Close / minimize behavior (fixed: hide/show all children correctly)
+local minimized = false
+closeBtn.MouseButton1Click:Connect(function()
+    tw(main, {Position = UDim2.new(0.5, 0, -1, 0), Size = UDim2.new(0, 20, 0, 20)}):Play()
+    delay(0.25, function() screenGui:Destroy() end)
+end)
+
+minimizeBtn.MouseButton1Click:Connect(function()
+    if minimized then
+        -- restore
+        tw(main, {Size = UDim2.new(0, 920, 0, 580)}):Play()
+        -- reveal content & sidebar
+        sidebar.Visible = true
+        content.Visible = true
+        pageTitle.Visible = true
+        for _,c in ipairs(main:GetChildren()) do
+            if c ~= header and c ~= dim and c ~= main:FindFirstChild("Shadow") then
+                c.Visible = true
+            end
+        end
+        minimized = false
+    else
+        -- minimize: shrink and hide sidebar/content area
+        tw(main, {Size = UDim2.new(0, 380, 0, 80)}):Play()
+        -- hide after animation tick
+        delay(0.12, function()
+            for _,c in ipairs({sidebar, content}) do
+                if c then c.Visible = false end
+            end
+            pageTitle.Visible = false
+        end)
+        minimized = true
+    end
+end)
+
+-- Make main draggable by header (keeps original behavior)
+do
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = main.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End and dragging then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    header.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement and dragging and dragStart and startPos then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- Simple search filtering for sidebar buttons by label text
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local q = searchBox.Text:lower()
+    for _, child in ipairs(buttonsHolder:GetChildren()) do
+        if child:IsA("Frame") and child.Name:match("Btn$") then
+            local btn = child:FindFirstChildWhichIsA("TextButton")
+            local lbl = btn and btn:FindFirstChildWhichIsA("TextLabel")
+            local nameText = child.Name:lower()
+            local visible = q == "" or nameText:find(q) or (lbl and lbl.Text:lower():find(q))
+            child.Visible = visible
+            child.Size = visible and UDim2.new(1,0,0,44) or UDim2.new(1,0,0,0)
+            child.LayoutOrder = visible and child.LayoutOrder or 999
+        end
+    end
+end)
+
+-- ======= Exposed API for adding pages / buttons programmatically =======
+local HubAPI = {}
+
+function HubAPI.AddPage(pageName, builderFunc)
+    if Pages[pageName] then warn("Page already exists:", pageName); return end
+    local p = createPage(pageName)
+    if type(builderFunc) == "function" then
+        builderFunc(p)
+    end
+    createSidebarButton(pageName, #buttonsHolder:GetChildren()+1)
+end
+
+function HubAPI.GetPage(pageName)
+    return Pages[pageName]
+end
+
+function HubAPI.Show(pageName)
+    showPage(pageName)
+end
+
+-- Auto-execute functionality (runs hub create script on join if enabled)
+if Settings.AutoExecute then
+    -- save so it's remembered
+    saveSettings()
+    -- Re-execute pattern: if this script is in StarterPlayerScripts, it will run automatically on join anyway.
+    -- For user convenience: create a global so future runs can detect hub exists
+    _G.UltraHubAutoExecuted = true
+end
+
+-- Save settings periodically
+spawn(function()
+    while screenGui.Parent do
+        saveSettings()
+        task.wait(2.5)
+    end
+end)
+
+-- expose HubAPI globally for console usage
+_G.UltraHub = HubAPI
+
+print("[UltraHub] Hub created — use HubAPI to add pages or control it.")
