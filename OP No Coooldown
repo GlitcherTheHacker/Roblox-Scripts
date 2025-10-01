@@ -1,1 +1,134 @@
+-- ⚡ NO COOLDOWN FINAL FORM - UNCAPPED GOD MODE ⚡
+-- Pure frame-locked spam, respawn proof, remote prioritized
 
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- === Cooldown Nuker ===
+local function nukeCooldowns(obj)
+    if not obj or not obj.GetDescendants then return end
+    for _, v in ipairs(obj:GetDescendants()) do
+        if v:IsA("BoolValue") or v:IsA("NumberValue") then
+            local name = v.Name:lower()
+            if name:find("cool") or name:find("cd") or name:find("debounce") or name:find("delay") then
+                pcall(function()
+                    if v:IsA("BoolValue") then
+                        v.Value = false
+                    else
+                        v.Value = 0
+                    end
+                end)
+                v.Changed:Connect(function()
+                    pcall(function()
+                        if v:IsA("BoolValue") then
+                            v.Value = false
+                        else
+                            v.Value = 0
+                        end
+                    end)
+                end)
+            end
+        end
+    end
+end
+
+-- Always nuke cooldowns on local player + future descendants
+pcall(function() nukeCooldowns(LocalPlayer) end)
+LocalPlayer.DescendantAdded:Connect(function(desc)
+    pcall(function() nukeCooldowns(desc) end)
+end)
+
+-- === Remote Finder (FightEvent priority) ===
+local function findRemote(tool)
+    if not tool then return nil end
+    -- Check for FightEvent first
+    local fe = tool:FindFirstChild("FightEvent", true)
+    if fe and (fe:IsA("RemoteEvent") or fe:IsA("RemoteFunction")) then
+        return fe
+    end
+    -- Fallback: any remote
+    for _, d in ipairs(tool:GetDescendants()) do
+        if d:IsA("RemoteEvent") or d:IsA("RemoteFunction") then
+            return d
+        end
+    end
+    return nil
+end
+
+-- === Tool Tracking ===
+local activeTools = {}
+local function patchTool(tool)
+    if not tool:IsA("Tool") then return end
+    nukeCooldowns(tool)
+
+    -- Activated = mark tool active
+    tool.Activated:Connect(function()
+        activeTools[tool] = true
+    end)
+    -- Unequipped = stop spam
+    tool.Unequipped:Connect(function()
+        activeTools[tool] = nil
+    end)
+    -- Destroy cleanup
+    tool.Destroying:Connect(function()
+        activeTools[tool] = nil
+    end)
+end
+
+-- Patch existing + new tools
+local function patchAll()
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local char = LocalPlayer.Character
+    if backpack then
+        for _, t in ipairs(backpack:GetChildren()) do
+            patchTool(t)
+        end
+    end
+    if char then
+        for _, t in ipairs(char:GetChildren()) do
+            patchTool(t)
+        end
+    end
+end
+
+patchAll()
+LocalPlayer.Backpack.ChildAdded:Connect(patchTool)
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.1)
+    nukeCooldowns(char)
+    char.ChildAdded:Connect(patchTool)
+    patchAll()
+end)
+
+-- === Global Infinite Spam Loop ===
+task.spawn(function()
+    while true do
+        local snapshot = {}
+        for tool in pairs(activeTools) do
+            if tool and tool.Parent == LocalPlayer.Character then
+                table.insert(snapshot, tool)
+            else
+                activeTools[tool] = nil
+            end
+        end
+
+        for _, tool in ipairs(snapshot) do
+            local remote = findRemote(tool)
+            if remote then
+                pcall(function()
+                    if remote:IsA("RemoteEvent") then
+                        remote:FireServer()
+                    else
+                        remote:InvokeServer()
+                    end
+                end)
+            end
+        end
+
+        -- No wait, tied directly to Heartbeat for max throughput
+        RunService.Heartbeat:Wait()
+    end
+end)
+
+print("⚡ NO COOLDOWN FINAL FORM: Uncapped God Mode Loaded ⚡")
