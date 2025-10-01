@@ -1,29 +1,24 @@
--- ⚡ ULTRA-INSTANT RESPAWN + TOOL GRABBER FINAL FORM ⚡
--- Instant respawn on death + grabs every allowed tool the same frame you spawn
+-- ⚡ TOOL GRABBER (Standalone) ⚡
 
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
 local Tycoons = workspace:WaitForChild("Tycoons")
 
--- Remote for respawning
-local Guide = ReplicatedStorage:WaitForChild("Guide")
-
 -- === CONFIG ===
-local hitPerFrame = 3 -- how many touches per frame per pad (higher = more reliable, but noisier)
+local hitPerFrame = 3 -- how many touches per frame per pad
 local allowedBases  = { "Stone", "Magic", "Storm" }
 local excludedBases = { "Insanity", "Giant", "Dark", "Spike", "Web", "Strong" }
 
--- Convert to lookup sets
+-- Lookup sets
 local allowedSet, excludedSet = {}, {}
 for _, b in ipairs(allowedBases) do allowedSet[b] = true end
 for _, b in ipairs(excludedBases) do excludedSet[b] = true end
 
--- Cache of pads
+-- Pad cache
 local pads = {}
 
--- === Pad Registering ===
+-- Registering pads
 local function registerPad(pad)
     local baseModel = pad.Parent and pad.Parent.Parent
     if not baseModel then return end
@@ -57,7 +52,7 @@ Tycoons.DescendantRemoving:Connect(function(desc)
     end
 end)
 
--- === Tool Grabber ===
+-- Touch helper
 local function fireTouch(root, pad)
     pcall(function()
         firetouchinterest(root, pad, 0)
@@ -65,6 +60,7 @@ local function fireTouch(root, pad)
     end)
 end
 
+-- Grab tools
 local function grabAllTools()
     local char = LocalPlayer.Character
     if not char then return end
@@ -78,46 +74,12 @@ local function grabAllTools()
     end
 end
 
--- === Respawn System ===
-local function forceRespawn()
-    pcall(function()
-        Guide:FireServer()
-    end)
-end
-
-local function hookCharacter(char)
-    local humanoid = char:WaitForChild("Humanoid", 2)
-    if not humanoid then return end
-
-    -- Grab tools instantly on spawn
+-- Grab instantly when spawning
+LocalPlayer.CharacterAdded:Connect(function(char)
     task.defer(grabAllTools)
+end)
 
-    humanoid.Died:Connect(function()
-        forceRespawn()
-    end)
-
-    -- Safety net: if Humanoid is removed (rare edge case)
-    char.ChildRemoved:Connect(function(child)
-        if child == humanoid then
-            forceRespawn()
-        end
-    end)
-
-    -- Frame-perfect health check
-    RunService.Stepped:Connect(function()
-        if humanoid and humanoid.Health <= 0 then
-            forceRespawn()
-        end
-    end)
-end
-
--- Hook lifecycle
-LocalPlayer.CharacterAdded:Connect(hookCharacter)
-if LocalPlayer.Character then
-    hookCharacter(LocalPlayer.Character)
-end
-
--- Keep grabbing tools every frame (just in case new pads spawn mid-game)
+-- Keep grabbing every frame
 RunService.Heartbeat:Connect(grabAllTools)
 
-print("⚡ ULTRA-INSTANT RESPAWN + TOOL GRABBER Final Form Loaded ⚡")
+print("⚡ TOOL GRABBER Loaded ⚡")
