@@ -1,56 +1,55 @@
--- ⚡ INSTANT RESPAWN (Standalone) ⚡
-
+-- ⚡ ULTRA-INSTANT RESPAWN v12 FIXED ⚡
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
--- Respawn remote
-local Guide = ReplicatedStorage:WaitForChild("Guide")
-
--- Respawn once
-local function forceRespawnOnce()
-    pcall(function()
-        Guide:FireServer()
-    end)
+-- attempt respawn immediately
+local function forceRespawn()
+    if LocalPlayer:FindFirstChild("LoadCharacter") then
+        LocalPlayer:LoadCharacter()
+    elseif ReplicatedStorage:FindFirstChild("Guide") then
+        ReplicatedStorage.Guide:FireServer()
+    end
 end
 
--- Hook character lifecycle
-local function hookCharacter(char)
-    local humanoid = char:WaitForChild("Humanoid", 2)
-    if not humanoid then return end
+-- track character
+local function onCharacterAdded(char)
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
 
-    local didRespawn = false
-
-    local function tryRespawn()
-        if not didRespawn then
-            didRespawn = true
-            forceRespawnOnce()
-        end
+    if not humanoid then
+        char.ChildAdded:Connect(function(c)
+            if c:IsA("Humanoid") then
+                humanoid = c
+            end
+        end)
     end
 
-    -- Death signal
-    humanoid.Died:Connect(tryRespawn)
-
-    -- Safety net: health monitor
-    RunService.Stepped:Connect(function()
+    -- Death detection — run once
+    local heartbeatConnection
+    heartbeatConnection = RunService.Heartbeat:Connect(function()
         if humanoid and humanoid.Health <= 0 then
-            tryRespawn()
+            heartbeatConnection:Disconnect() -- stop loop
+            forceRespawn()
         end
     end)
 
-    -- If humanoid is deleted
-    char.ChildRemoved:Connect(function(child)
-        if child == humanoid then
-            tryRespawn()
+    -- instant fallback: if humanoid is destroyed
+    char.ChildRemoved:Connect(function(c)
+        if c == humanoid then
+            heartbeatConnection:Disconnect()
+            forceRespawn()
         end
     end)
 end
 
--- Reset hook each time we spawn
-LocalPlayer.CharacterAdded:Connect(hookCharacter)
+LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+-- if already loaded, hook immediately
 if LocalPlayer.Character then
-    hookCharacter(LocalPlayer.Character)
+    onCharacterAdded(LocalPlayer.Character)
+else
+    forceRespawn()
 end
 
-print("⚡ INSTANT RESPAWN Loaded ⚡")
+print("⚡ ULTRA-INSTANT RESPAWN v12 FIXED loaded ⚡")
