@@ -1,5 +1,5 @@
--- ⚡ ULTIMATE ANTI-LAG V1 ⚡
--- Nukes particles, textures, sounds, physics junk, shadows, etc.
+-- ⚡ SMART ANTI-LAG ⚡
+-- Aggressively reduces lag without hammering the CPU
 
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
@@ -13,41 +13,76 @@ local destroyTypes = {
     "Decal", "Texture", "SurfaceAppearance", "Shirt", "Pants"
 }
 
-local function deepClean(obj)
-    for _, child in ipairs(obj:GetChildren()) do
-        -- Kill unwanted classes
-        for _, className in ipairs(destroyTypes) do
-            if child:IsA(className) then
-                child:Destroy()
-            end
-        end
+-- Keep track of already cleaned objects to avoid re-checking them
+local cleaned = {}
 
-        -- Parts optimization
-        if child:IsA("BasePart") then
-            child.Material = Enum.Material.SmoothPlastic
-            child.Reflectance = 0
-            if child.Transparency < 0.05 then
-                child.CastShadow = false
-            end
-            if not child.Anchored and not child.CanCollide then
-                child.CanCollide = false
-            end
-        end
+local function cleanObject(obj)
+    if cleaned[obj] then return end
 
-        -- Kill sounds
-        if child:IsA("Sound") then
-            child:Stop()
-            child.Volume = 0
+    -- Kill unwanted classes
+    for _, className in ipairs(destroyTypes) do
+        if obj:IsA(className) then
+            obj:Destroy()
+            return -- destroyed, no need to continue
         end
-
-        -- Recurse
-        deepClean(child)
     end
+
+    -- Parts optimization
+    if obj:IsA("BasePart") then
+        obj.Material = Enum.Material.SmoothPlastic
+        obj.Reflectance = 0
+        if obj.Transparency < 0.05 then
+            obj.CastShadow = false
+        end
+        if not obj.Anchored and not obj.CanCollide then
+            obj.CanCollide = false
+        end
+    end
+
+    -- Stop sounds
+    if obj:IsA("Sound") then
+        obj:Stop()
+        obj.Volume = 0
+    end
+
+    cleaned[obj] = true
 end
 
--- Run once on workspace + Lighting
-deepClean(workspace)
-deepClean(Lighting)
+-- Batch-cleaning function (avoids freezing)
+local function batchClean(objects)
+    local batchSize = 100 -- number of objects per frame
+    local index = 1
+    local total = #objects
+
+    local conn
+    conn = RunService.Heartbeat:Connect(function()
+        for i = 1, batchSize do
+            if index > total then
+                conn:Disconnect()
+                return
+            end
+            cleanObject(objects[index])
+            index += 1
+        end
+    end)
+end
+
+-- Collect all objects in workspace + lighting
+local function collectAllObjects(root)
+    local all = {}
+    local function recurse(obj)
+        table.insert(all, obj)
+        for _, child in ipairs(obj:GetChildren()) do
+            recurse(child)
+        end
+    end
+    recurse(root)
+    return all
+end
+
+-- Initial cleanup
+batchClean(collectAllObjects(workspace))
+batchClean(collectAllObjects(Lighting))
 
 -- === LIGHTING OPTIMIZATION ===
 Lighting.GlobalShadows = false
@@ -64,9 +99,11 @@ pcall(function()
     workspace.Terrain.Decoration = false
 end)
 
--- === CONTINUOUS CLEAN LOOP ===
+-- === OPTIONAL: Periodic light cleaning loop (safe, low frequency) ===
 RunService.Heartbeat:Connect(function()
-    deepClean(workspace)
+    for _, obj in ipairs(workspace:GetChildren()) do
+        cleanObject(obj)
+    end
 end)
 
-print("⚡ ULTIMATE ANTI-LAG ENABLED ⚡")
+print("⚡ SMART ANTI-LAG ENABLED ⚡")
