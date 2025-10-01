@@ -1,65 +1,62 @@
--- ⚡ ULTIMATE KILL AURA V1 ⚡
--- Auto-attacks all enemies in range every frame
+-- CONFIG
+local auraRange = 20 -- Distance to target players
+local attackRate = 0.01 -- Seconds between each attack per tool
 
+-- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
--- CONFIG
-local auraRadius = 25 -- change range as needed
-local maxHitsPerFrame = 2 -- extra hits for reliability
+-- STATE
+local running = true
 
--- Utility: get root part
-local function getRoot(char)
-    return char and char:FindFirstChild("HumanoidRootPart")
+-- GET PLAYER CHAR
+local function GetCharacter(player)
+	return player and player.Character
 end
 
--- Main aura loop
-RunService.Heartbeat:Connect(function()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local root = getRoot(char)
-    if not root then return end
+-- GET ENEMIES IN RANGE
+local function GetTargets()
+	local targets = {}
+	local myChar = GetCharacter(LocalPlayer)
+	if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return targets end
 
-    -- Grab all tools (equipped + backpack auto-equip)
-    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
-        if tool:IsA("Tool") then
-            tool.Parent = char
-        end
-    end
+	local myPos = myChar.HumanoidRootPart.Position
 
-    for _, tool in ipairs(char:GetChildren()) do
-        if not tool:IsA("Tool") then continue end
-        local remote = tool:FindFirstChildWhichIsA("RemoteEvent") or tool:FindFirstChildWhichIsA("RemoteFunction")
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer then
+			local char = GetCharacter(player)
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if hrp and (hrp.Position - myPos).Magnitude <= auraRange then
+				table.insert(targets, player)
+			end
+		end
+	end
 
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LocalPlayer and plr.Character then
-                local enemyRoot = getRoot(plr.Character)
-                local enemyHum = plr.Character:FindFirstChildOfClass("Humanoid")
+	return targets
+end
 
-                if enemyRoot and enemyHum and enemyHum.Health > 0 then
-                    local dist = (enemyRoot.Position - root.Position).Magnitude
-                    if dist <= auraRadius then
-                        -- Fire multiple times per frame for reliability
-                        for i = 1, maxHitsPerFrame do
-                            if remote then
-                                pcall(function()
-                                    if remote:IsA("RemoteEvent") then
-                                        remote:FireServer()
-                                    else
-                                        remote:InvokeServer()
-                                    end
-                                end)
-                            else
-                                -- Fallback: Tool:Activate
-                                task.defer(function() pcall(function() tool:Activate() end) end)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
+-- MAIN LOOP
+task.spawn(function()
+	while running do
+		local char = GetCharacter(LocalPlayer)
+		if not char then task.wait() continue end
+
+		for _, tool in ipairs(char:GetChildren()) do
+			if tool:IsA("Tool") and tool:FindFirstChild("FightEvent") then
+				tool:Activate()
+				for _, target in ipairs(GetTargets()) do
+					tool.FightEvent:FireServer()
+				end
+			end
+		end
+
+		task.wait(attackRate)
+	end
 end)
 
-print("⚡ ULTIMATE KILL AURA ENABLED ⚡")
+-- CLEANUP ON DEATH
+LocalPlayer.CharacterAdded:Connect(function()
+	task.wait(1)
+	running = true
+end)
