@@ -1,0 +1,158 @@
+-- Loopbring GUI - Clean Compact Edition
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local bringTargets = {}
+local distance = 2
+
+-- GUI Setup
+local gui = Instance.new("ScreenGui")
+gui.Name = "LoopbringGUI"
+gui.ResetOnSpawn = false
+gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Toggle Button
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Parent = gui
+toggleBtn.Size = UDim2.new(0, 40, 0, 40)
+toggleBtn.Position = UDim2.new(1, -50, 0, 100)
+toggleBtn.Text = "⇩"
+toggleBtn.TextScaled = true
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
+
+-- Main Frame
+local frame = Instance.new("Frame")
+frame.Parent = gui
+frame.Position = UDim2.new(1, -250, 0, 145)
+frame.Size = UDim2.new(0, 220, 0, 260)
+frame.BackgroundColor3 = Color3.fromRGB(25, 5, 5)
+frame.Visible = false
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+Instance.new("UIStroke", frame).Color = Color3.fromRGB(200, 0, 0)
+
+-- Header
+local header = Instance.new("Frame", frame)
+header.Size = UDim2.new(1, 0, 0, 40)
+header.BackgroundTransparency = 1
+
+local minusBtn = Instance.new("TextButton", header)
+minusBtn.Size = UDim2.new(0, 40, 1, 0)
+minusBtn.Text = "-"
+minusBtn.Font = Enum.Font.GothamBold
+minusBtn.TextScaled = true
+minusBtn.BackgroundColor3 = Color3.fromRGB(80, 0, 0)
+minusBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0, 8)
+
+local distanceLabel = Instance.new("TextLabel", header)
+distanceLabel.Size = UDim2.new(1, -80, 1, 0)
+distanceLabel.Position = UDim2.new(0, 40, 0, 0)
+distanceLabel.Text = "Distance: " .. distance
+distanceLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
+distanceLabel.TextScaled = true
+distanceLabel.Font = Enum.Font.GothamBold
+distanceLabel.BackgroundTransparency = 1
+
+local plusBtn = minusBtn:Clone()
+plusBtn.Text = "+"
+plusBtn.Parent = header
+plusBtn.Position = UDim2.new(1, -40, 0, 0)
+
+-- Player List
+local scroll = Instance.new("ScrollingFrame", frame)
+scroll.Position = UDim2.new(0, 0, 0, 50)
+scroll.Size = UDim2.new(1, 0, 1, -50)
+scroll.BackgroundTransparency = 1
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.ScrollBarThickness = 5
+
+local layout = Instance.new("UIListLayout", scroll)
+layout.Padding = UDim.new(0, 3)
+
+-- Core Loopbring Logic
+local function updateTeleportation()
+	local char = LocalPlayer.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	for _, name in ipairs(bringTargets) do
+		local plr = Players:FindFirstChild(name)
+		if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+			local target = plr.Character.HumanoidRootPart
+			local pos = root.Position + root.CFrame.LookVector * distance
+			target.CFrame = CFrame.new(pos, root.Position) * CFrame.Angles(0, math.rad(180), 0)
+		end
+	end
+end
+
+local function loopBring(name)
+	if table.find(bringTargets, name) then return end
+	table.insert(bringTargets, name)
+	coroutine.wrap(function()
+		while table.find(bringTargets, name) do
+			updateTeleportation()
+			task.wait(0.05)
+		end
+	end)()
+end
+
+local function stopBring(name)
+	local i = table.find(bringTargets, name)
+	if i then table.remove(bringTargets, i) end
+end
+
+-- Player Buttons
+local function refreshList()
+	for _, c in ipairs(scroll:GetChildren()) do
+		if c:IsA("TextButton") then c:Destroy() end
+	end
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer then
+			local btn = Instance.new("TextButton")
+			btn.Parent = scroll
+			btn.Size = UDim2.new(1, -8, 0, 28)
+			btn.Text = p.Name
+			btn.Font = Enum.Font.Gotham
+			btn.TextScaled = true
+			btn.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
+			btn.TextColor3 = table.find(bringTargets, p.Name) and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 255, 0)
+			Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+			btn.MouseButton1Click:Connect(function()
+				if table.find(bringTargets, p.Name) then
+					stopBring(p.Name)
+				else
+					loopBring(p.Name)
+				end
+				refreshList()
+			end)
+		end
+	end
+	scroll.CanvasSize = UDim2.new(0, 0, 0, #Players:GetPlayers() * 32)
+end
+
+Players.PlayerAdded:Connect(function(p)
+	refreshList()
+	if table.find(bringTargets, p.Name) then loopBring(p.Name) end
+end)
+Players.PlayerRemoving:Connect(function(p)
+	stopBring(p.Name)
+	refreshList()
+end)
+
+-- UI Hooks
+toggleBtn.MouseButton1Click:Connect(function()
+	frame.Visible = not frame.Visible
+end)
+
+plusBtn.MouseButton1Click:Connect(function()
+	distance += 1
+	distanceLabel.Text = "Distance: " .. distance
+end)
+minusBtn.MouseButton1Click:Connect(function()
+	distance = math.max(1, distance - 1)
+	distanceLabel.Text = "Distance: " .. distance
+end)
+
+-- Init
+refreshList()
