@@ -1,0 +1,42 @@
+-- ⚡ Escape Script (Lag Loopbrought Players)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GuideRemote = ReplicatedStorage:FindFirstChild("Guide")
+
+-- Duration of lag burst
+local LAG_DURATION = 4
+local LAG_INTERVAL = 0.01 -- spam rate (~100 calls/sec)
+
+-- Main lag function
+local function lagEnemies()
+    if not GuideRemote or typeof(GuideRemote.FireServer) ~= "function" then
+        warn("Guide remote not found!")
+        return
+    end
+
+    -- Require loopbring targets
+    if not bringTargets or #bringTargets == 0 then
+        warn("No loopbrung players to lag!")
+        return
+    end
+
+    print("⚠ Escape Script activated! Lagging enemies for " .. LAG_DURATION .. "s...")
+
+    local start = tick()
+    while tick() - start < LAG_DURATION do
+        -- Spam Guide remote on loopbrung targets
+        for _, enemyName in ipairs(bringTargets) do
+            local enemy = game.Players:FindFirstChild(enemyName)
+            if enemy then
+                pcall(function()
+                    GuideRemote:FireServer(enemy)
+                end)
+            end
+        end
+        task.wait(LAG_INTERVAL)
+    end
+
+    print("✅ Escape Script finished, lag burst stopped.")
+end
+
+-- Run it
+lagEnemies()
