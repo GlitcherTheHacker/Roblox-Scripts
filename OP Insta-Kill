@@ -1,0 +1,79 @@
+-- ⚡ INSTA-KILL FINAL FORM - FIGHTEVENT DESTROYER ⚡
+-- Pure remote spamming via FightEvent, respawn proof, max throughput
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- === Remote Finder (FightEvent only) ===
+local function findFightEvent(tool)
+    if not tool or not tool:IsA("Tool") then return nil end
+    local fe = tool:FindFirstChild("FightEvent", true)
+    if fe and fe:IsA("RemoteEvent") then
+        return fe
+    end
+    return nil
+end
+
+-- === Active tool tracking ===
+local fightEvents = {} -- [tool] = remote
+
+local function patchTool(tool)
+    if not tool:IsA("Tool") then return end
+    local fe = findFightEvent(tool)
+    if not fe then return end
+
+    fightEvents[tool] = fe
+
+    tool.Destroying:Connect(function()
+        fightEvents[tool] = nil
+    end)
+    tool.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            fightEvents[tool] = nil
+        end
+    end)
+end
+
+local function patchAll()
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local char = LocalPlayer.Character
+    if backpack then
+        for _, t in ipairs(backpack:GetChildren()) do
+            patchTool(t)
+        end
+    end
+    if char then
+        for _, t in ipairs(char:GetChildren()) do
+            patchTool(t)
+        end
+    end
+end
+
+-- Initial + respawn hooks
+patchAll()
+LocalPlayer.Backpack.ChildAdded:Connect(patchTool)
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.1)
+    patchAll()
+    char.ChildAdded:Connect(patchTool)
+end)
+
+-- === Insta-Kill Spam Loop ===
+task.spawn(function()
+    while true do
+        for tool, fe in pairs(fightEvents) do
+            if tool and fe and tool.Parent == LocalPlayer.Character then
+                pcall(function()
+                    fe:FireServer() -- raw hammering
+                end)
+            else
+                fightEvents[tool] = nil
+            end
+        end
+        -- Heartbeat wait = 60 calls/sec per tool minimum
+        RunService.Heartbeat:Wait()
+    end
+end)
+
+print("⚡ INSTA-KILL FINAL FORM: FightEvent Destroyer Loaded ⚡")
