@@ -1,5 +1,4 @@
--- ⚡ USE TOOLS SELECTOR GUI ⚡
--- Toggle spam tools individually, or all at once. Updates live.
+-- ⚡ USE TOOLS SELECTOR GUI (Fixed + Upgraded) ⚡
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -13,11 +12,10 @@ screenGui.Parent = game.CoreGui
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 200, 0, 300)
-mainFrame.Position = UDim2.new(0, 20, 0.4, -150) -- left-center
+mainFrame.Position = UDim2.new(0, 20, 0.4, -150)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
-
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
 local header = Instance.new("TextLabel")
@@ -52,20 +50,38 @@ layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
 local toolButtons = {}
 local activeTools = {}
 
--- Spam loop (runs once, checks active tools continuously)
+-- Equip tool helper
+local function equipTool(tool)
+    if tool and tool.Parent == LocalPlayer.Backpack then
+        tool.Parent = LocalPlayer.Character
+    end
+end
+
+-- Unequip tool helper
+local function unequipTool(tool)
+    if tool and tool.Parent == LocalPlayer.Character then
+        tool.Parent = LocalPlayer.Backpack
+    end
+end
+
+-- Spam loop
 RunService.Heartbeat:Connect(function()
     local char = LocalPlayer.Character
     if not char then return end
     for tool, enabled in pairs(activeTools) do
-        if enabled and tool.Parent == char then
+        if enabled then
+            if tool.Parent ~= char then
+                equipTool(tool)
+            end
             pcall(function() tool:Activate() end)
         end
     end
 end)
 
--- Create toggle button for a tool
+-- Create toggle button
 local function createToolButton(tool)
     if toolButtons[tool] then return end
+
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(1, -10, 0, 30)
     button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
@@ -76,17 +92,22 @@ local function createToolButton(tool)
     button.Parent = scrollingFrame
     Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
 
+    activeTools[tool] = false
+
     button.MouseButton1Click:Connect(function()
         activeTools[tool] = not activeTools[tool]
         if activeTools[tool] then
+            equipTool(tool)
             button.Text = tool.Name .. " [ON]"
             button.BackgroundColor3 = Color3.fromRGB(60, 0, 90)
         else
+            unequipTool(tool)
             button.Text = tool.Name .. " [OFF]"
             button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
         end
     end)
 
+    -- Auto-cleanup
     tool.AncestryChanged:Connect(function(_, parent)
         if not parent then
             activeTools[tool] = nil
@@ -98,7 +119,7 @@ local function createToolButton(tool)
     toolButtons[tool] = button
 end
 
--- Scan Backpack + Character for tools
+-- Refresh tools
 local function refreshTools()
     for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
         if tool:IsA("Tool") then createToolButton(tool) end
@@ -110,7 +131,7 @@ local function refreshTools()
     end
 end
 
--- Watch for new tools
+-- Tool listeners
 LocalPlayer.Backpack.ChildAdded:Connect(function(tool)
     if tool:IsA("Tool") then createToolButton(tool) end
 end)
@@ -137,6 +158,7 @@ Instance.new("UICorner", useAllBtn).CornerRadius = UDim.new(0, 6)
 useAllBtn.MouseButton1Click:Connect(function()
     for tool, btn in pairs(toolButtons) do
         activeTools[tool] = true
+        equipTool(tool)
         btn.Text = tool.Name .. " [ON]"
         btn.BackgroundColor3 = Color3.fromRGB(60, 0, 90)
     end
@@ -156,9 +178,10 @@ Instance.new("UICorner", stopAllBtn).CornerRadius = UDim.new(0, 6)
 stopAllBtn.MouseButton1Click:Connect(function()
     for tool, btn in pairs(toolButtons) do
         activeTools[tool] = false
+        unequipTool(tool)
         btn.Text = tool.Name .. " [OFF]"
         btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     end
 end)
 
-print("⚡ USE TOOLS SELECTOR GUI loaded ⚡")
+print("⚡ USE TOOLS SELECTOR GUI (Fixed) Loaded ⚡")
