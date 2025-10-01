@@ -702,7 +702,7 @@ toolsHeader.Text = "Tool Scripts"
 toolsHeader.Parent = toolsPage
 
 local tools = {
-    {"Get Tools/Respawn", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Respawn%20%2B%20Tool%20Grabber"},
+    {"Get Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Tool%20Grabber"},
     {"Use Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Use%20Tools"},
     {"OP No Cooldown", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20No%20Coooldown"},
     {"OP Insta-Kill", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Insta-Kill"},
@@ -727,11 +727,11 @@ pHeader.Text = "Player Scripts"
 pHeader.Parent = playerPage
 
 local playerScripts = {
+    {"OP Respawn", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Respawn"}
     {"Loopbring", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Loopbring"},
     {"Damage", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Damage"},
     {"OP Anti-Lag", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Anti-Lag"},
-    {"Escape", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Escape"},
-    {"Infini,te Yield", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"}
+    {"Infinite Yield", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"}
 }
 for i,t in ipairs(playerScripts) do
     local row = createActionButton(t[1], t[2])
@@ -752,6 +752,7 @@ oHeader.Text = "Other Scripts"
 oHeader.Parent = otherPage
 
 local otherScripts = {
+    {"Escape", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Escape"},
     {"Enemy Notifier", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Enemy%20Notifier"},
 }
 for i,t in ipairs(otherScripts) do
@@ -994,46 +995,50 @@ end)
 
 -- ======= Build sidebar buttons (in same order as pages) =======
 local btnWelcome = createSidebarButton("Welcome", 1); btnWelcome.SetAccent(true)
-local btnTools = createSidebarButton("Tool Scripts", 2)
-local btnPlayer = createSidebarButton("Player Scripts", 3)
-local btnOther = createSidebarButton("Other Scripts", 4)
-local btnUpdates = createSidebarButton("Updates", 5)
+local btnUpdates = createSidebarButton("Updates", 2)
+local btnTools = createSidebarButton("Tool Scripts", 3)
+local btnPlayer = createSidebarButton("Player Scripts", 4)
+local btnOther = createSidebarButton("Other Scripts", 5)
 local btnSettings = createSidebarButton("Settings", 6)
 
 -- populate initial accents and show default page
 showPage("Welcome")
 
--- Close / minimize behavior (fixed: hide/show all children correctly)
+-- Close / minimize behavior (fixed + reliable)
 local minimized = false
+
 closeBtn.MouseButton1Click:Connect(function()
     tw(main, {Position = UDim2.new(0.5, 0, -1, 0), Size = UDim2.new(0, 20, 0, 20)}):Play()
-    delay(0.25, function() screenGui:Destroy() end)
+    task.delay(0.25, function()
+        screenGui:Destroy()
+    end)
 end)
 
 minimizeBtn.MouseButton1Click:Connect(function()
     if minimized then
-        -- restore
-        tw(main, {Size = UDim2.new(0, 920, 0, 580)}):Play()
-        -- reveal content & sidebar
+        -- === RESTORE ===
+        local tween = tw(main, {Size = UDim2.new(0, 920, 0, 580)})
+        tween:Play()
+        tween.Completed:Wait()
+        -- show after tween finishes
         sidebar.Visible = true
         content.Visible = true
         pageTitle.Visible = true
         for _,c in ipairs(main:GetChildren()) do
-            if c ~= header and c ~= dim and c ~= main:FindFirstChild("Shadow") then
+            if c ~= header and c ~= dim and c.Name ~= "Shadow" then
                 c.Visible = true
             end
         end
         minimized = false
     else
-        -- minimize: shrink and hide sidebar/content area
-        tw(main, {Size = UDim2.new(0, 380, 0, 80)}):Play()
-        -- hide after animation tick
-        delay(0.12, function()
-            for _,c in ipairs({sidebar, content}) do
-                if c then c.Visible = false end
-            end
-            pageTitle.Visible = false
-        end)
+        -- === MINIMIZE ===
+        local tween = tw(main, {Size = UDim2.new(0, 380, 0, 80)})
+        tween:Play()
+        tween.Completed:Wait()
+        -- hide after tween finishes
+        if sidebar then sidebar.Visible = false end
+        if content then content.Visible = false end
+        if pageTitle then pageTitle.Visible = false end
         minimized = true
     end
 end)
