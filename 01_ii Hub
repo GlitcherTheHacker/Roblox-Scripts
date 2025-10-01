@@ -643,7 +643,7 @@ welcomeText.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEM
 welcomeText.Text = "Welcome to the 01_ii SPT Hub, built from scratch, cleanest hub yet, most overpowered ever!! To begin using the hub, start with getting a base with the button below!"
 welcomeText.Parent = pageWelcome
 
-local getBaseBtn = createActionButton("Get Base", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Get%20Base%20V3")
+local getBaseBtn = createActionButton("Get Base", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Get%20Base%20V3.txt")
 getBaseBtn.LayoutOrder = 5
 getBaseBtn.Parent = pageWelcome
 
