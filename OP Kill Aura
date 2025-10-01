@@ -1,0 +1,65 @@
+-- ⚡ ULTIMATE KILL AURA V1 ⚡
+-- Auto-attacks all enemies in range every frame
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- CONFIG
+local auraRadius = 25 -- change range as needed
+local maxHitsPerFrame = 2 -- extra hits for reliability
+
+-- Utility: get root part
+local function getRoot(char)
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+-- Main aura loop
+RunService.Heartbeat:Connect(function()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = getRoot(char)
+    if not root then return end
+
+    -- Grab all tools (equipped + backpack auto-equip)
+    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            tool.Parent = char
+        end
+    end
+
+    for _, tool in ipairs(char:GetChildren()) do
+        if not tool:IsA("Tool") then continue end
+        local remote = tool:FindFirstChildWhichIsA("RemoteEvent") or tool:FindFirstChildWhichIsA("RemoteFunction")
+
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character then
+                local enemyRoot = getRoot(plr.Character)
+                local enemyHum = plr.Character:FindFirstChildOfClass("Humanoid")
+
+                if enemyRoot and enemyHum and enemyHum.Health > 0 then
+                    local dist = (enemyRoot.Position - root.Position).Magnitude
+                    if dist <= auraRadius then
+                        -- Fire multiple times per frame for reliability
+                        for i = 1, maxHitsPerFrame do
+                            if remote then
+                                pcall(function()
+                                    if remote:IsA("RemoteEvent") then
+                                        remote:FireServer()
+                                    else
+                                        remote:InvokeServer()
+                                    end
+                                end)
+                            else
+                                -- Fallback: Tool:Activate
+                                task.defer(function() pcall(function() tool:Activate() end) end)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+print("⚡ ULTIMATE KILL AURA ENABLED ⚡")
