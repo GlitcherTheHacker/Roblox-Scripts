@@ -1,3 +1,7 @@
+-- Ultra Hub v2.0 (single-file LocalScript)
+-- Paste into StarterPlayerScripts or StarterGui (LocalScript)
+-- Author: Generated (you). Upgraded: Adds pages, scrollable content, settings, theme editor, autosave, mobile scaling, fixed minimize, single-press run buttons.
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -14,9 +18,13 @@ local allowedIDs = {
     3972688973,
     2522193455, 
 --  ==[[ 01_ii Clan Members ]]==
-    9407037318, -- Messi
+    3816480506, -- Messi Main
+    9407037318, -- Messi Alt
     9113218108, -- David Main
     9383251439, -- David Alt
+    2271342427. -- Kaiden
+    2057263511, -- Jacob
+
 }
 
 local function isVerified(userId)
@@ -1122,4 +1130,4 @@ end)
 -- expose HubAPI globally for console usage
 _G.UltraHub = HubAPI
 
-print("[UltraHub] Hub created — use HubAPI to add pages or control it.")
+print("[UltraHub] Hub created")
