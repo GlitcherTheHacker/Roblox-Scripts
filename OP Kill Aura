@@ -1,6 +1,6 @@
 -- CONFIG
-local auraRange = 20 -- Distance to target players
-local attackRate = 0.01 -- Seconds between each attack per tool
+local auraRange = 20       -- distance to hit players
+local attackRate = 0.1     -- seconds between attacks
 
 -- SERVICES
 local Players = game:GetService("Players")
@@ -10,53 +10,56 @@ local LocalPlayer = Players.LocalPlayer
 -- STATE
 local running = true
 
--- GET PLAYER CHAR
+-- GET PLAYER CHARACTER
 local function GetCharacter(player)
-	return player and player.Character
+    return player and player.Character
 end
 
--- GET ENEMIES IN RANGE
+-- GET TARGETS IN RANGE
 local function GetTargets()
-	local targets = {}
-	local myChar = GetCharacter(LocalPlayer)
-	if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return targets end
+    local targets = {}
+    local myChar = GetCharacter(LocalPlayer)
+    if not myChar then return targets end
 
-	local myPos = myChar.HumanoidRootPart.Position
+    local hrp = myChar:FindFirstChild("HumanoidRootPart")
+    if not hrp then return targets end
 
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer then
-			local char = GetCharacter(player)
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			if hrp and (hrp.Position - myPos).Magnitude <= auraRange then
-				table.insert(targets, player)
-			end
-		end
-	end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local char = GetCharacter(player)
+            local targetHRP = char and char:FindFirstChild("HumanoidRootPart")
+            if targetHRP and (targetHRP.Position - hrp.Position).Magnitude <= auraRange then
+                table.insert(targets, targetHRP)
+            end
+        end
+    end
 
-	return targets
+    return targets
 end
 
 -- MAIN LOOP
 task.spawn(function()
-	while running do
-		local char = GetCharacter(LocalPlayer)
-		if not char then task.wait() continue end
-
-		for _, tool in ipairs(char:GetChildren()) do
-			if tool:IsA("Tool") and tool:FindFirstChild("FightEvent") then
-				tool:Activate()
-				for _, target in ipairs(GetTargets()) do
-					tool.FightEvent:FireServer()
-				end
-			end
-		end
-
-		task.wait(attackRate)
-	end
+    while running do
+        local char = GetCharacter(LocalPlayer)
+        if char then
+            -- Fire all FightEvents for tools with a FightEvent
+            for _, tool in ipairs(char:GetChildren()) do
+                if tool:IsA("Tool") and tool:FindFirstChild("FightEvent") then
+                    for _, target in ipairs(GetTargets()) do
+                        -- Fire server with target (no touching needed)
+                        pcall(function()
+                            tool.FightEvent:FireServer(target)
+                        end)
+                    end
+                end
+            end
+        end
+        task.wait(attackRate)
+    end
 end)
 
--- CLEANUP ON DEATH
+-- RESET ON DEATH
 LocalPlayer.CharacterAdded:Connect(function()
-	task.wait(1)
-	running = true
+    task.wait(1)
+    running = true
 end)
