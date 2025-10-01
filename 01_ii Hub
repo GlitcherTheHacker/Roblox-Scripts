@@ -1,3 +1,7 @@
+-- Ultra Hub v2.0 (single-file LocalScript)
+-- Paste into StarterPlayerScripts or StarterGui (LocalScript)
+-- Author: Generated (you). Upgraded: Adds pages, scrollable content, settings, theme editor, autosave, mobile scaling, fixed minimize, single-press run buttons.
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -618,6 +622,48 @@ local getBaseBtn = createActionButton("Get Base", "https://raw.githubusercontent
 getBaseBtn.LayoutOrder = 5
 getBaseBtn.Parent = pageWelcome
 
+-- Updates page (scrollable text area where you can edit updates)
+local updatesPage = createPage("Updates")
+local updatesHeader = Instance.new("TextLabel")
+updatesHeader.Size = UDim2.new(1, -24, 0, 26)
+updatesHeader.BackgroundTransparency = 1
+updatesHeader.Font = Enum.Font.GothamBold
+updatesHeader.TextSize = 16
+updatesHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+updatesHeader.TextXAlignment = Enum.TextXAlignment.Left
+updatesHeader.Text = "Updates"
+updatesHeader.Parent = updatesPage
+
+-- editable TextBox inside a scrolling frame
+local updatesBox = Instance.new("TextBox")
+updatesBox.Size = UDim2.new(1, -12, 0, 220)
+updatesBox.BackgroundColor3 = Color3.fromRGB(18,18,22)
+updatesBox.TextWrapped = true
+updatesBox.Text =[[
+- Updates 📃: 
+
+- Fixed butotns not working at all
+- OP No Cooldown Added/Updated
+- OP Insta-Kill Added/Updated
+- Kill Aura Added/Updatecd
+- Get Tools & Respawn Added/Updated (Max performance and speed grabbing, The Use Tools and Respawn script have been combiend into one!)
+- Use Tools Added (Brand new gui and functionality for use tools)
+- Loopbring Added
+
+*** New Scripts ***
+- Enemy Notifier (Notifys you when a GND member joins the server (FInd this in the Other Scripts Page))
+- Escape (Lags people you have Loopbrung for a few seconds, giving you a moment to make a comeback)
+]]
+updatesBox.TextXAlignment = Enum.TextXAlignment.Left
+updatesBox.TextYAlignment = Enum.TextYAlignment.Top
+updatesBox.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+updatesBox.Font = Enum.Font.Gotham
+updatesBox.TextSize = 14
+updatesBox.MultiLine = true
+updatesBox.Parent = updatesPage
+addRound(updatesBox, UDim.new(0,8))
+addStroke(updatesBox, Color3.fromRGB(0,0,0), 1)
+
 -- Tools page (lots of single-press action buttons)
 local toolsPage = createPage("Tool Scripts")
 local toolsHeader = Instance.new("TextLabel")
@@ -631,15 +677,11 @@ toolsHeader.Text = "Tool Scripts"
 toolsHeader.Parent = toolsPage
 
 local tools = {
-    {"Get Tools V9", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Get%20Tools%20V9.lua"},
-    {"Use Tools V10", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Use%20Tools%20V10"},
-    {"No Cooldown V16", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/No%20Cooldown%20V16"},
-    {"Insta-Kill V7", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Insta-Kill%20V7"},
-    {"Reach", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Reach"},
-    {"Kill Aura V2", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Kill%20Aura%20V2"},
-    {"Float Tools", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Float%20Tools%20V2"},
-    {"Fly Tools", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Fly%20Tools"},
-    {"Grip Tools", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Grip%20Tools"}
+    {"Get Tools/Respawn", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Respawn%20%2B%20Tool%20Grabber"},
+    {"Use Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Use%20Tools"},
+    {"OP No Cooldown", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20No%20Coooldown"},
+    {"OP Insta-Kill", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Insta-Kill"},
+    {"Kill Aura", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Kill%20Aura"},
 }
 for i, t in ipairs(tools) do
     local row = createActionButton(t[1], t[2])
@@ -660,11 +702,11 @@ pHeader.Text = "Player Scripts"
 pHeader.Parent = playerPage
 
 local playerScripts = {
-    {"Respawn V11", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Respawn%20V11.lua"},
-    {"Loopbring", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Loopbring%20V6.lua"},
-    {"Damage", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Damage"},
-    {"OP Anti-Lag", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Anti-Lag%20V5"},
-    {"Infinite Yield", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"}
+    {"Loopbring", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Loopbring"},
+    {"Damage", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Damage"},
+    {"OP Anti-Lag", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Anti-Lag"},
+    {"Escape", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Escape"},
+    {"Infini,te Yield", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"}
 }
 for i,t in ipairs(playerScripts) do
     local row = createActionButton(t[1], t[2])
@@ -685,48 +727,13 @@ oHeader.Text = "Other Scripts"
 oHeader.Parent = otherPage
 
 local otherScripts = {
-    {"Lag Server", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Lag%20Server"},
-    {"Perma-Death", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/God%20Mode.lua"},
-    {"Walking God Mode", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Walking%20God%20Mode"},
-    {"Emote GUI", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/UGC%20Emotes"},
-    {"Axe Smash Shield", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Axe%20Smash%20Spam"},
-    {"Axe Smash Trap", "https://raw.githubusercontent.com/TheOneWhoAlwaysWatches/Roblox-Scripts/refs/heads/main/Axe%20Smash%20Trap"}
+    {"Enemy Notifier", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Enemy%20Notifier"},
 }
 for i,t in ipairs(otherScripts) do
     local row = createActionButton(t[1], t[2])
     row.LayoutOrder = 10 + i
     row.Parent = otherPage
 end
-
--- Updates page (scrollable text area where you can edit updates)
-local updatesPage = createPage("Updates")
-local updatesHeader = Instance.new("TextLabel")
-updatesHeader.Size = UDim2.new(1, -24, 0, 26)
-updatesHeader.BackgroundTransparency = 1
-updatesHeader.Font = Enum.Font.GothamBold
-updatesHeader.TextSize = 16
-updatesHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
-updatesHeader.TextXAlignment = Enum.TextXAlignment.Left
-updatesHeader.Text = "Updates"
-updatesHeader.Parent = updatesPage
-
--- editable TextBox inside a scrolling frame
-local updatesBox = Instance.new("TextBox")
-updatesBox.Size = UDim2.new(1, -12, 0, 220)
-updatesBox.BackgroundColor3 = Color3.fromRGB(18,18,22)
-updatesBox.TextWrapped = true
-updatesBox.ClearTextOnFocus = false
-updatesBox.Text = "Changelog:\n- Ultra Hub v2.0\n- Pages added\n- Theme editor\n- Mobile scaling\n\nWrite any hub updates here."
-updatesBox.TextXAlignment = Enum.TextXAlignment.Left
-updatesBox.TextYAlignment = Enum.TextYAlignment.Top
-updatesBox.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
-updatesBox.Font = Enum.Font.Gotham
-updatesBox.TextSize = 14
-updatesBox.MultiLine = true
-updatesBox.Parent = updatesPage
-addRound(updatesBox, UDim.new(0,8))
-addStroke(updatesBox, Color3.fromRGB(0,0,0), 1)
-updatesBox.ClearTextOnFocus = false
 
 -- Settings page
 local settingsPage = createPage("Settings")
@@ -1089,4 +1096,4 @@ end)
 -- expose HubAPI globally for console usage
 _G.UltraHub = HubAPI
 
-print("01_ii Hub Executed Successfully!")
+print("[UltraHub] Hub created — use HubAPI to add pages or control it.")
