@@ -1,0 +1,72 @@
+-- ⚡ ULTIMATE ANTI-LAG V1 ⚡
+-- Nukes particles, textures, sounds, physics junk, shadows, etc.
+
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- === CLEANUP SETTINGS ===
+local destroyTypes = {
+    "ParticleEmitter", "Trail", "Beam", "Fire", "Smoke", "Sparkles",
+    "Explosion", "ForceField", "Highlight", "ShirtGraphic",
+    "Decal", "Texture", "SurfaceAppearance", "Shirt", "Pants"
+}
+
+local function deepClean(obj)
+    for _, child in ipairs(obj:GetChildren()) do
+        -- Kill unwanted classes
+        for _, className in ipairs(destroyTypes) do
+            if child:IsA(className) then
+                child:Destroy()
+            end
+        end
+
+        -- Parts optimization
+        if child:IsA("BasePart") then
+            child.Material = Enum.Material.SmoothPlastic
+            child.Reflectance = 0
+            if child.Transparency < 0.05 then
+                child.CastShadow = false
+            end
+            if not child.Anchored and not child.CanCollide then
+                child.CanCollide = false
+            end
+        end
+
+        -- Kill sounds
+        if child:IsA("Sound") then
+            child:Stop()
+            child.Volume = 0
+        end
+
+        -- Recurse
+        deepClean(child)
+    end
+end
+
+-- Run once on workspace + Lighting
+deepClean(workspace)
+deepClean(Lighting)
+
+-- === LIGHTING OPTIMIZATION ===
+Lighting.GlobalShadows = false
+Lighting.FogEnd = 9e9
+Lighting.Brightness = 1
+pcall(function() Lighting.Technology = Enum.Technology.Compatibility end)
+
+-- === TERRAIN OPTIMIZATION ===
+pcall(function()
+    workspace.Terrain.WaterReflectance = 0
+    workspace.Terrain.WaterTransparency = 1
+    workspace.Terrain.WaterWaveSize = 0
+    workspace.Terrain.WaterWaveSpeed = 0
+    workspace.Terrain.Decoration = false
+end)
+
+-- === CONTINUOUS CLEAN LOOP ===
+RunService.Heartbeat:Connect(function()
+    deepClean(workspace)
+end)
+
+print("⚡ ULTIMATE ANTI-LAG ENABLED ⚡")
