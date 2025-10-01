@@ -1,57 +1,69 @@
--- ⚡ NoCooldown (Max Aggression)
--- Nukes yields, cooldowns, debounces, delays
+-- ⚡ NoCooldown V11 (Ultra Strong + Safe)
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- === YIELD NUKES ===
-local function fastYield()
-    return RunService.PostSimulation:Wait() -- runs as fast as engine allows
-end
+-- === WAIT OVERRIDES ===
+-- Replace wait/task.wait with PostSimulation (max player-side speed)
+hookfunction(wait, function()
+    return RunService.PostSimulation:Wait()
+end)
 
--- wait replacements
-hookfunction(wait, fastYield)
-hookfunction(task.wait, fastYield)
+hookfunction(task.wait, function()
+    return RunService.PostSimulation:Wait()
+end)
 
--- spawn/delay replacements
-hookfunction(spawn, function(fn) task.spawn(fn) end)
-hookfunction(delay, function(_, fn) task.spawn(fn) end)
+-- Replace delay/spawn with task.spawn (non-yielding)
+hookfunction(delay, function(_, func)
+    task.spawn(func)
+end)
 
--- RunService Wait nukes
-hookfunction(RunService.Heartbeat.Wait, fastYield)
-hookfunction(RunService.Stepped.Wait, fastYield)
-hookfunction(RunService.RenderStepped.Wait, fastYield)
-hookfunction(RunService.PostSimulation.Wait, fastYield)
+hookfunction(spawn, function(func)
+    task.spawn(func)
+end)
 
--- BindableEvent/Event Wait nukes
-hookfunction(game:GetService("ReplicatedStorage").ChildAdded.Wait, function() return nil end)
--- (⚠️ optional) you can also hook BindableEvent.Event:Wait if needed
-
--- === COOLDOWN NUKE ===
-local function nukeCooldowns(obj)
-    for _, v in ipairs(obj:GetDescendants()) do
-        if v:IsA("BoolValue") then
-            v.Value = false
-            v.Changed:Connect(function()
-                pcall(function() v.Value = false end)
-            end)
-        elseif v:IsA("NumberValue") then
-            v.Value = 0
-            v.Changed:Connect(function()
-                pcall(function() v.Value = 0 end)
-            end)
-        end
-    end
-end
-
-pcall(function() nukeCooldowns(LocalPlayer) end)
-LocalPlayer.DescendantAdded:Connect(function(d) pcall(function() nukeCooldowns(d) end) end)
-
--- === OPTIONAL FAST THREAD SPAWNER ===
--- Replace task.defer with task.spawn
+-- Optional: replace task.defer for instant execution
 hookfunction(task.defer, function(fn, ...)
     return task.spawn(fn, ...)
 end)
 
-print("✅ NoCooldown loaded: all yields/cooldowns nuked, max aggression.")
+-- === COOLDOWN NUKE ===
+local function nukeCooldowns(obj)
+    for _, v in ipairs(obj:GetDescendants()) do
+        if v:IsA("BoolValue") or v:IsA("NumberValue") then
+            local n = v.Name:lower()
+            if n:find("cool") or n:find("cd") or n:find("debounce") or n:find("delay") then
+                if v:IsA("BoolValue") then
+                    v.Value = false
+                    v.Changed:Connect(function() pcall(function() v.Value = false end) end)
+                else
+                    v.Value = 0
+                    v.Changed:Connect(function() pcall(function() v.Value = 0 end) end)
+                end
+            end
+        end
+    end
+end
+
+-- Run on yourself and new descendants
+pcall(function() nukeCooldowns(LocalPlayer) end)
+LocalPlayer.DescendantAdded:Connect(function(d) pcall(function() nukeCooldowns(d) end) end)
+
+-- === OPTIONAL FAST LOOP HELPER ===
+-- You can bind super-fast spam tasks here
+local function fastLoop(callback)
+    task.spawn(function()
+        while true do
+            RunService.PostSimulation:Wait()
+            callback()
+        end
+    end)
+end
+
+-- Example usage:
+-- fastLoop(function()
+--     -- put spammy stuff here, like tool:Activate() or remote:FireServer()
+-- end)
+
+print("✅ NoCooldown V11 loaded: Ultra Strong + Safe")
