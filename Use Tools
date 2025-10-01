@@ -1,4 +1,4 @@
--- ⚡ USE TOOLS SELECTOR GUI (Fixed + Upgraded) ⚡
+-- ⚡ USE TOOLS SELECTOR GUI (Upgraded) ⚡
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -18,6 +18,7 @@ mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
+-- Header (draggable)
 local header = Instance.new("TextLabel")
 header.Size = UDim2.new(1, 0, 0, 30)
 header.BackgroundColor3 = Color3.fromRGB(40, 0, 60)
@@ -28,6 +29,33 @@ header.TextSize = 16
 header.Parent = mainFrame
 Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
 
+-- Make header draggable
+local dragging, dragInput, dragStart, startPos
+header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+header.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+RunService.RenderStepped:Connect(function()
+    if dragging and dragInput then
+        local delta = dragInput.Position - dragStart
+        mainFrame.Position = startPos + UDim2.new(0, delta.X, 0, delta.Y)
+    end
+end)
+
+-- Scrolling frame for tools
 local scrollingFrame = Instance.new("ScrollingFrame")
 scrollingFrame.Size = UDim2.new(1, -10, 1, -70)
 scrollingFrame.Position = UDim2.new(0, 5, 0, 35)
@@ -49,15 +77,14 @@ layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
 -- === TOOL MANAGER ===
 local toolButtons = {}
 local activeTools = {}
+local useAllActive = false -- tracks Use All state
 
--- Equip tool helper
+-- Equip/Unequip
 local function equipTool(tool)
     if tool and tool.Parent == LocalPlayer.Backpack then
         tool.Parent = LocalPlayer.Character
     end
 end
-
--- Unequip tool helper
 local function unequipTool(tool)
     if tool and tool.Parent == LocalPlayer.Character then
         tool.Parent = LocalPlayer.Backpack
@@ -81,7 +108,6 @@ end)
 -- Create toggle button
 local function createToolButton(tool)
     if toolButtons[tool] then return end
-
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(1, -10, 0, 30)
     button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
@@ -100,6 +126,7 @@ local function createToolButton(tool)
             equipTool(tool)
             button.Text = tool.Name .. " [ON]"
             button.BackgroundColor3 = Color3.fromRGB(60, 0, 90)
+            useAllActive = false -- disables Use All if toggled manually
         else
             unequipTool(tool)
             button.Text = tool.Name .. " [OFF]"
@@ -107,7 +134,6 @@ local function createToolButton(tool)
         end
     end)
 
-    -- Auto-cleanup
     tool.AncestryChanged:Connect(function(_, parent)
         if not parent then
             activeTools[tool] = nil
@@ -119,11 +145,20 @@ local function createToolButton(tool)
     toolButtons[tool] = button
 end
 
--- Refresh tools
+-- Refresh tools list
 local function refreshTools()
+    -- Clear buttons first
+    for _, btn in pairs(toolButtons) do
+        btn:Destroy()
+    end
+    toolButtons = {}
+    activeTools = {}
+
+    -- Add tools from backpack
     for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
         if tool:IsA("Tool") then createToolButton(tool) end
     end
+    -- Add tools from character
     if LocalPlayer.Character then
         for _, tool in ipairs(LocalPlayer.Character:GetChildren()) do
             if tool:IsA("Tool") then createToolButton(tool) end
@@ -131,7 +166,7 @@ local function refreshTools()
     end
 end
 
--- Tool listeners
+-- Listeners to refresh tools on respawn / new tools
 LocalPlayer.Backpack.ChildAdded:Connect(function(tool)
     if tool:IsA("Tool") then createToolButton(tool) end
 end)
@@ -139,6 +174,8 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     char.ChildAdded:Connect(function(tool)
         if tool:IsA("Tool") then createToolButton(tool) end
     end)
+    task.wait(0.5)
+    refreshTools() -- update list on respawn
 end)
 
 refreshTools()
@@ -155,15 +192,6 @@ useAllBtn.TextSize = 14
 useAllBtn.Parent = mainFrame
 Instance.new("UICorner", useAllBtn).CornerRadius = UDim.new(0, 6)
 
-useAllBtn.MouseButton1Click:Connect(function()
-    for tool, btn in pairs(toolButtons) do
-        activeTools[tool] = true
-        equipTool(tool)
-        btn.Text = tool.Name .. " [ON]"
-        btn.BackgroundColor3 = Color3.fromRGB(60, 0, 90)
-    end
-end)
-
 local stopAllBtn = Instance.new("TextButton")
 stopAllBtn.Size = UDim2.new(0.45, 0, 0, 30)
 stopAllBtn.Position = UDim2.new(1, -95, 1, -35)
@@ -175,7 +203,20 @@ stopAllBtn.TextSize = 14
 stopAllBtn.Parent = mainFrame
 Instance.new("UICorner", stopAllBtn).CornerRadius = UDim.new(0, 6)
 
+-- Use All button
+useAllBtn.MouseButton1Click:Connect(function()
+    useAllActive = true
+    for tool, btn in pairs(toolButtons) do
+        activeTools[tool] = true
+        equipTool(tool)
+        btn.Text = tool.Name .. " [ON]"
+        btn.BackgroundColor3 = Color3.fromRGB(60, 0, 90)
+    end
+end)
+
+-- Stop All button
 stopAllBtn.MouseButton1Click:Connect(function()
+    useAllActive = false
     for tool, btn in pairs(toolButtons) do
         activeTools[tool] = false
         unequipTool(tool)
@@ -184,4 +225,17 @@ stopAllBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-print("⚡ USE TOOLS SELECTOR GUI (Fixed) Loaded ⚡")
+-- Ensure Use All keeps running even after respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if useAllActive then
+        for tool, btn in pairs(toolButtons) do
+            activeTools[tool] = true
+            equipTool(tool)
+            btn.Text = tool.Name .. " [ON]"
+            btn.BackgroundColor3 = Color3.fromRGB(60, 0, 90)
+        end
+    end
+end)
+
+print("⚡ USE TOOLS SELECTOR GUI (Upgraded) Loaded ⚡")
