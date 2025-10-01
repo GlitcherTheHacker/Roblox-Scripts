@@ -707,7 +707,8 @@ toolsHeader.Parent = toolsPage
 
 local tools = {
     {"Get Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Tool%20Grabber"},
-    {"Use Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Use%20Tools"},
+    {"Tool UI (W.I.P)", "Nil"},
+    {"Use Tools Backup", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Use%20Tools%20(Back%20Up)"},
     {"OP No Cooldown", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20No%20Coooldown"},
     {"OP Insta-Kill", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Insta-Kill"},
     {"Kill Aura", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Kill%20Aura"},
@@ -1130,4 +1131,4 @@ end)
 -- expose HubAPI globally for console usage
 _G.UltraHub = HubAPI
 
-print("[UltraHub] Hub created")
+print("[UltraHub] Hub created — use HubAPI to add pages or control it.")
