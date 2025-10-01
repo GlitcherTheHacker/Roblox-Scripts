@@ -1,69 +1,59 @@
--- ⚡ NoCooldown V11 (Ultra Strong + Safe)
+-- ⚡ No Cooldown (Super OP, Remote + Tool Spam) ⚡
 
-local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
--- === WAIT OVERRIDES ===
--- Replace wait/task.wait with PostSimulation (max player-side speed)
+-- Aggressive wait overrides
 hookfunction(wait, function()
-    return RunService.PostSimulation:Wait()
+	return RunService.PostSimulation:Wait()
 end)
-
 hookfunction(task.wait, function()
-    return RunService.PostSimulation:Wait()
+	return RunService.PostSimulation:Wait()
 end)
-
--- Replace delay/spawn with task.spawn (non-yielding)
 hookfunction(delay, function(_, func)
-    task.spawn(func)
+	task.spawn(func)
 end)
-
 hookfunction(spawn, function(func)
-    task.spawn(func)
+	task.spawn(func)
 end)
 
--- Optional: replace task.defer for instant execution
-hookfunction(task.defer, function(fn, ...)
-    return task.spawn(fn, ...)
+-- Main spam loop
+local function startNoCooldown()
+	task.spawn(function()
+		while true do
+			local char = LocalPlayer.Character
+			if char then
+				for _, tool in ipairs(char:GetChildren()) do
+					if tool:IsA("Tool") then
+						-- Force equip + activate
+						tool:Activate()
+						if tool.Parent ~= char then
+							tool.Parent = char
+						end
+
+						-- Spam FightEvent if it exists
+						local fightEvent = tool:FindFirstChild("FightEvent")
+						if fightEvent then
+							fightEvent:FireServer()
+						end
+					end
+				end
+			end
+			-- ⚠️ Key: this delay controls ping vs. power
+			RunService.Heartbeat:Wait() -- fastest safe loop (can tweak to PostSimulation)
+		end
+	end)
+end
+
+-- Start when character spawns
+LocalPlayer.CharacterAdded:Connect(function()
+	task.wait(0.5)
+	startNoCooldown()
 end)
 
--- === COOLDOWN NUKE ===
-local function nukeCooldowns(obj)
-    for _, v in ipairs(obj:GetDescendants()) do
-        if v:IsA("BoolValue") or v:IsA("NumberValue") then
-            local n = v.Name:lower()
-            if n:find("cool") or n:find("cd") or n:find("debounce") or n:find("delay") then
-                if v:IsA("BoolValue") then
-                    v.Value = false
-                    v.Changed:Connect(function() pcall(function() v.Value = false end) end)
-                else
-                    v.Value = 0
-                    v.Changed:Connect(function() pcall(function() v.Value = 0 end) end)
-                end
-            end
-        end
-    end
+if LocalPlayer.Character then
+	startNoCooldown()
 end
 
--- Run on yourself and new descendants
-pcall(function() nukeCooldowns(LocalPlayer) end)
-LocalPlayer.DescendantAdded:Connect(function(d) pcall(function() nukeCooldowns(d) end) end)
-
--- === OPTIONAL FAST LOOP HELPER ===
--- You can bind super-fast spam tasks here
-local function fastLoop(callback)
-    task.spawn(function()
-        while true do
-            RunService.PostSimulation:Wait()
-            callback()
-        end
-    end)
-end
-
--- Example usage:
--- fastLoop(function()
---     -- put spammy stuff here, like tool:Activate() or remote:FireServer()
--- end)
-
-print("✅ NoCooldown V11 loaded: Ultra Strong + Safe")
+print("⚔️ Ultra No Cooldown Loaded — Frame-Locked Max Power ⚔️")
