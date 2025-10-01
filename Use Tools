@@ -1,4 +1,4 @@
--- ⚡ USE TOOLS SELECTOR GUI (Upgraded) ⚡
+-- ⚡ USE TOOLS SPAWNER / SPAMMER GUI ⚡
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -29,7 +29,7 @@ header.TextSize = 16
 header.Parent = mainFrame
 Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
 
--- Make header draggable
+-- Draggable
 local dragging, dragInput, dragStart, startPos
 header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -55,7 +55,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Scrolling frame for tools
+-- Scrolling frame
 local scrollingFrame = Instance.new("ScrollingFrame")
 scrollingFrame.Size = UDim2.new(1, -10, 1, -70)
 scrollingFrame.Position = UDim2.new(0, 5, 0, 35)
@@ -69,17 +69,16 @@ local layout = Instance.new("UIListLayout")
 layout.Parent = scrollingFrame
 layout.Padding = UDim.new(0, 5)
 
-local function updateCanvas()
+layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
-end
-layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+end)
 
 -- === TOOL MANAGER ===
 local toolButtons = {}
 local activeTools = {}
-local useAllActive = false -- tracks Use All state
+local useAllActive = false -- default off
 
--- Equip/Unequip
+-- Equip/Unequip helpers
 local function equipTool(tool)
     if tool and tool.Parent == LocalPlayer.Backpack then
         tool.Parent = LocalPlayer.Character
@@ -91,49 +90,24 @@ local function unequipTool(tool)
     end
 end
 
--- Spam loop
-RunService.Heartbeat:Connect(function()
-    local char = LocalPlayer.Character
-    if not char then return end
-    for tool, enabled in pairs(activeTools) do
-        if enabled then
-            if tool.Parent ~= char then
-                equipTool(tool)
-            end
-            pcall(function() tool:Activate() end)
-        end
-    end
-end)
-
--- Create toggle button
+-- Create a tool button
 local function createToolButton(tool)
     if toolButtons[tool] then return end
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(1, -10, 0, 30)
     button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.Text = tool.Name .. " [OFF]"
+    button.Text = tool.Name
     button.Font = Enum.Font.Gotham
     button.TextSize = 14
     button.Parent = scrollingFrame
     Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
 
+    -- Track in table
     activeTools[tool] = false
+    toolButtons[tool] = button
 
-    button.MouseButton1Click:Connect(function()
-        activeTools[tool] = not activeTools[tool]
-        if activeTools[tool] then
-            equipTool(tool)
-            button.Text = tool.Name .. " [ON]"
-            button.BackgroundColor3 = Color3.fromRGB(60, 0, 90)
-            useAllActive = false -- disables Use All if toggled manually
-        else
-            unequipTool(tool)
-            button.Text = tool.Name .. " [OFF]"
-            button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-        end
-    end)
-
+    -- Cleanup
     tool.AncestryChanged:Connect(function(_, parent)
         if not parent then
             activeTools[tool] = nil
@@ -141,24 +115,20 @@ local function createToolButton(tool)
             button:Destroy()
         end
     end)
-
-    toolButtons[tool] = button
 end
 
--- Refresh tools list
+-- Refresh tool list (instant)
 local function refreshTools()
-    -- Clear buttons first
-    for _, btn in pairs(toolButtons) do
-        btn:Destroy()
-    end
+    -- Clear current buttons
+    for _, btn in pairs(toolButtons) do btn:Destroy() end
     toolButtons = {}
     activeTools = {}
 
-    -- Add tools from backpack
+    -- Add backpack tools
     for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
         if tool:IsA("Tool") then createToolButton(tool) end
     end
-    -- Add tools from character
+    -- Add character tools
     if LocalPlayer.Character then
         for _, tool in ipairs(LocalPlayer.Character:GetChildren()) do
             if tool:IsA("Tool") then createToolButton(tool) end
@@ -166,76 +136,61 @@ local function refreshTools()
     end
 end
 
--- Listeners to refresh tools on respawn / new tools
+-- Initial execute
+refreshTools()
+
+-- Update on respawn
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.5)
+    refreshTools()
+end)
 LocalPlayer.Backpack.ChildAdded:Connect(function(tool)
     if tool:IsA("Tool") then createToolButton(tool) end
 end)
-LocalPlayer.CharacterAdded:Connect(function(char)
-    char.ChildAdded:Connect(function(tool)
+if LocalPlayer.Character then
+    LocalPlayer.Character.ChildAdded:Connect(function(tool)
         if tool:IsA("Tool") then createToolButton(tool) end
     end)
-    task.wait(0.5)
-    refreshTools() -- update list on respawn
-end)
+end
 
-refreshTools()
-
--- === CONTROL BUTTONS ===
+-- === USE ALL BUTTON ===
 local useAllBtn = Instance.new("TextButton")
-useAllBtn.Size = UDim2.new(0.45, 0, 0, 30)
+useAllBtn.Size = UDim2.new(1, -10, 0, 30)
 useAllBtn.Position = UDim2.new(0, 5, 1, -35)
 useAllBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
-useAllBtn.Text = "Use All"
+useAllBtn.Text = "Use All [OFF]"
 useAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 useAllBtn.Font = Enum.Font.GothamBold
 useAllBtn.TextSize = 14
 useAllBtn.Parent = mainFrame
 Instance.new("UICorner", useAllBtn).CornerRadius = UDim.new(0, 6)
 
-local stopAllBtn = Instance.new("TextButton")
-stopAllBtn.Size = UDim2.new(0.45, 0, 0, 30)
-stopAllBtn.Position = UDim2.new(1, -95, 1, -35)
-stopAllBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
-stopAllBtn.Text = "Stop All"
-stopAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-stopAllBtn.Font = Enum.Font.GothamBold
-stopAllBtn.TextSize = 14
-stopAllBtn.Parent = mainFrame
-Instance.new("UICorner", stopAllBtn).CornerRadius = UDim.new(0, 6)
-
--- Use All button
 useAllBtn.MouseButton1Click:Connect(function()
-    useAllActive = true
-    for tool, btn in pairs(toolButtons) do
-        activeTools[tool] = true
-        equipTool(tool)
-        btn.Text = tool.Name .. " [ON]"
-        btn.BackgroundColor3 = Color3.fromRGB(60, 0, 90)
-    end
-end)
-
--- Stop All button
-stopAllBtn.MouseButton1Click:Connect(function()
-    useAllActive = false
-    for tool, btn in pairs(toolButtons) do
-        activeTools[tool] = false
-        unequipTool(tool)
-        btn.Text = tool.Name .. " [OFF]"
-        btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    end
-end)
-
--- Ensure Use All keeps running even after respawn
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.5)
+    useAllActive = not useAllActive
     if useAllActive then
-        for tool, btn in pairs(toolButtons) do
-            activeTools[tool] = true
-            equipTool(tool)
-            btn.Text = tool.Name .. " [ON]"
-            btn.BackgroundColor3 = Color3.fromRGB(60, 0, 90)
+        useAllBtn.Text = "Use All [ON]"
+        useAllBtn.BackgroundColor3 = Color3.fromRGB(60, 0, 90)
+    else
+        useAllBtn.Text = "Use All [OFF]"
+        useAllBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+    end
+end)
+
+-- === TOOL SPAM LOOP ===
+RunService.Heartbeat:Connect(function()
+    if useAllActive then
+        local char = LocalPlayer.Character
+        if char then
+            for tool, _ in pairs(activeTools) do
+                if tool and tool.Parent ~= char then
+                    equipTool(tool)
+                end
+                if tool then
+                    pcall(function() tool:Activate() end)
+                end
+            end
         end
     end
 end)
 
-print("⚡ USE TOOLS SELECTOR GUI (Upgraded) Loaded ⚡")
+print("⚡ USE TOOLS SPAWNER GUI Loaded ⚡")
