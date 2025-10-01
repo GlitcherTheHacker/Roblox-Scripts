@@ -1,7 +1,3 @@
--- Ultra Hub v2.0 (single-file LocalScript)
--- Paste into StarterPlayerScripts or StarterGui (LocalScript)
--- Author: Generated (you). Upgraded: Adds pages, scrollable content, settings, theme editor, autosave, mobile scaling, fixed minimize, single-press run buttons.
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -727,7 +723,7 @@ pHeader.Text = "Player Scripts"
 pHeader.Parent = playerPage
 
 local playerScripts = {
-    {"OP Respawn", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Respawn"}
+    {"OP Respawn", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Respawn"},
     {"Loopbring", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Loopbring"},
     {"Damage", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Damage"},
     {"OP Anti-Lag", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Anti-Lag"},
