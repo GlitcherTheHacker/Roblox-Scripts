@@ -1,0 +1,86 @@
+_G.HeadSize = 10
+_G.HitboxSize = Vector3.new(25, 25, 25) -- Tamaño del hitbox
+_G.Disabled = false
+_G.ToggleKey = Enum.KeyCode.H -- Tecla para habilitar/deshabilitar el hitbox
+
+-- Alternar el estado del hitbox con una tecla
+game:GetService("UserInputService").InputBegan:Connect(function(input, isProcessed)
+    if not isProcessed and input.KeyCode == _G.ToggleKey then
+        _G.Disabled = not _G.Disabled
+    end
+end)
+
+game:GetService("RunService").RenderStepped:Connect(function()
+    if not _G.Disabled then
+        local localPlayer = game:GetService("Players").LocalPlayer
+        for _, player in pairs(game:GetService("Players"):GetPlayers()) do
+            if player.Name ~= localPlayer.Name then
+                pcall(function()
+                    -- Ajustar tamaño de la cabeza
+                    player.Character.Head.Size = Vector3.new(_G.HeadSize, _G.HeadSize, _G.HeadSize)
+                    player.Character.Head.Transparency = 1
+                    player.Character.Head.CanCollide = false
+                    player.Character.Head.Massless = true
+
+                    -- Crear el hitbox con líneas visibles
+                    local hitbox = player.Character:FindFirstChild("Hitbox")
+                    if not hitbox then
+                        hitbox = Instance.new("Part")
+                        hitbox.Name = "Hitbox"
+                        hitbox.Size = _G.HitboxSize
+                        hitbox.Transparency = 1 -- Invisible pero funcional
+                        hitbox.CanCollide = false
+                        hitbox.Massless = true
+                        hitbox.Anchored = false
+                        hitbox.CFrame = player.Character.Head.CFrame
+                        hitbox.Parent = player.Character
+
+                        -- Añadir líneas para bordes del hitbox
+                        local selectionBox = Instance.new("SelectionBox")
+                        selectionBox.Adornee = hitbox
+                        selectionBox.LineThickness = 0.05
+                        selectionBox.Color3 = Color3.fromRGB(255, 255, 255) -- Blanco
+                        selectionBox.SurfaceTransparency = 0.5
+                        selectionBox.Parent = hitbox
+
+                        -- Conectar el hitbox a la cabeza
+                        local weld = Instance.new("WeldConstraint")
+                        weld.Part0 = player.Character.Head
+                        weld.Part1 = hitbox
+                        weld.Parent = hitbox
+
+                        -- Crear BillboardGui para mostrar la vida
+                        local billboardGui = Instance.new("BillboardGui")
+                        billboardGui.Name = "HealthGui"
+                        billboardGui.Adornee = hitbox
+                        billboardGui.Size = UDim2.new(0, 100, 0, 25) -- Tamaño reducido
+                        billboardGui.StudsOffset = Vector3.new(0, 3, 0)
+                        billboardGui.Parent = hitbox
+
+                        local textLabel = Instance.new("TextLabel")
+                        textLabel.Name = "HealthLabel"
+                        textLabel.Size = UDim2.new(1, 0, 1, 0)
+                        textLabel.BackgroundTransparency = 1
+                        textLabel.TextColor3 = Color3.new(1, 1, 1)
+                        textLabel.TextStrokeTransparency = 0.5
+                        textLabel.TextScaled = true
+                        textLabel.Font = Enum.Font.Gotham -- Fuente clara y legible
+                        textLabel.TextSize = 10 -- Tamaño del texto reducido
+                        textLabel.Parent = billboardGui
+                    end
+
+                    -- Actualizar posición del hitbox y texto de vida
+                    hitbox.CFrame = player.Character.Head.CFrame
+                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                    if humanoid then
+                        local healthGui = hitbox:FindFirstChild("HealthGui")
+                        local healthLabel = healthGui and healthGui:FindFirstChild("HealthLabel")
+                        if healthLabel then
+                            healthLabel.Text = string.format("Health: %.0f", humanoid.Health)
+                        end
+                    end
+                end)
+            end
+        end
+    end
+end)
