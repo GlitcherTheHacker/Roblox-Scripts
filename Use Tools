@@ -1,0 +1,168 @@
+-- ⚡ USE TOOLS SELECTOR GUI ⚡
+-- Select individual tools to spam OR use them all
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- State
+local activeTools = {} -- [tool] = true if spamming
+local toolButtons = {} -- tool -> button
+
+-- GUI
+local screenGui = Instance.new("ScreenGui", game.CoreGui)
+screenGui.Name = "UseToolsSelector"
+
+local frame = Instance.new("Frame", screenGui)
+frame.Position = UDim2.new(0, 10, 0.4, 0)
+frame.Size = UDim2.new(0, 200, 0, 300)
+frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+frame.BorderSizePixel = 0
+
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+local stroke = Instance.new("UIStroke", frame)
+stroke.Color = Color3.fromRGB(255, 0, 0)
+stroke.Thickness = 2
+
+-- Header
+local header = Instance.new("TextLabel", frame)
+header.Size = UDim2.new(1, 0, 0, 30)
+header.BackgroundTransparency = 1
+header.Text = "⚡ Use Tools"
+header.TextColor3 = Color3.fromRGB(255, 255, 255)
+header.TextSize = 18
+header.Font = Enum.Font.GothamBold
+
+-- ScrollFrame for tools
+local scroll = Instance.new("ScrollingFrame", frame)
+scroll.Position = UDim2.new(0, 0, 0, 35)
+scroll.Size = UDim2.new(1, 0, 1, -70)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.ScrollBarThickness = 6
+scroll.BackgroundTransparency = 1
+
+local listLayout = Instance.new("UIListLayout", scroll)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0, 4)
+
+-- "Use All" button
+local useAllBtn = Instance.new("TextButton", frame)
+useAllBtn.Size = UDim2.new(1, -10, 0, 30)
+useAllBtn.Position = UDim2.new(0, 5, 1, -35)
+useAllBtn.Text = "Use All"
+useAllBtn.BackgroundColor3 = Color3.fromRGB(30, 0, 0)
+useAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+useAllBtn.Font = Enum.Font.GothamBold
+useAllBtn.TextSize = 16
+
+Instance.new("UICorner", useAllBtn).CornerRadius = UDim.new(0, 6)
+
+-- Update Canvas when tools change
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    scroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+end)
+
+-- Spam Loop
+RunService.Heartbeat:Connect(function()
+    local char = LocalPlayer.Character
+    if not char then return end
+    for tool in pairs(activeTools) do
+        if tool and tool.Parent == char then
+            pcall(function() tool:Activate() end)
+        elseif tool and tool.Parent == LocalPlayer.Backpack then
+            tool.Parent = char -- auto-equip
+        end
+    end
+end)
+
+-- Toggle a tool
+local function toggleTool(tool)
+    if not tool then return end
+    if activeTools[tool] then
+        activeTools[tool] = nil
+        toolButtons[tool].BackgroundColor3 = Color3.fromRGB(30, 0, 0)
+    else
+        activeTools[tool] = true
+        toolButtons[tool].BackgroundColor3 = Color3.fromRGB(0, 120, 0)
+    end
+end
+
+-- Create button for a tool
+local function addToolButton(tool)
+    if toolButtons[tool] then return end
+    local btn = Instance.new("TextButton", scroll)
+    btn.Size = UDim2.new(1, -10, 0, 28)
+    btn.Text = tool.Name
+    btn.BackgroundColor3 = Color3.fromRGB(30, 0, 0)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 14
+
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        toggleTool(tool)
+    end)
+
+    toolButtons[tool] = btn
+
+    -- Cleanup if destroyed
+    tool.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            if btn then btn:Destroy() end
+            activeTools[tool] = nil
+            toolButtons[tool] = nil
+        end
+    end)
+end
+
+-- Refresh tools in Backpack + Character
+local function refreshTools()
+    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then addToolButton(tool) end
+    end
+    local char = LocalPlayer.Character
+    if char then
+        for _, tool in ipairs(char:GetChildren()) do
+            if tool:IsA("Tool") then addToolButton(tool) end
+        end
+    end
+end
+
+-- Hook tool changes
+LocalPlayer.Backpack.ChildAdded:Connect(function(tool)
+    if tool:IsA("Tool") then addToolButton(tool) end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.delay(0.2, function()
+        for _, tool in ipairs(char:GetChildren()) do
+            if tool:IsA("Tool") then addToolButton(tool) end
+        end
+    end)
+end)
+
+-- Use All button
+useAllBtn.MouseButton1Click:Connect(function()
+    local char = LocalPlayer.Character
+    if not char then return end
+    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            activeTools[tool] = true
+            addToolButton(tool)
+            toolButtons[tool].BackgroundColor3 = Color3.fromRGB(0, 120, 0)
+        end
+    end
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") then
+            activeTools[tool] = true
+            addToolButton(tool)
+            toolButtons[tool].BackgroundColor3 = Color3.fromRGB(0, 120, 0)
+        end
+    end
+end)
+
+-- Initial load
+refreshTools()
+
+print("⚡ Use Tools Selector GUI Loaded ⚡")
