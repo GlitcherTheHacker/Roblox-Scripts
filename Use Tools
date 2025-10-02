@@ -1,7 +1,9 @@
--- ⚡ USE TOOLS SPAWNER / SPAMMER GUI ⚡
+-- ⚡ USE TOOLS SELECTOR GUI (Final Version) ⚡
+-- Live tool manager with draggable GUI, individual + global spam
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 -- === GUI SETUP ===
@@ -18,7 +20,7 @@ mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
--- Header (draggable)
+-- draggable header
 local header = Instance.new("TextLabel")
 header.Size = UDim2.new(1, 0, 0, 30)
 header.BackgroundColor3 = Color3.fromRGB(40, 0, 60)
@@ -29,33 +31,37 @@ header.TextSize = 16
 header.Parent = mainFrame
 Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
 
--- Draggable
-local dragging, dragInput, dragStart, startPos
-header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = mainFrame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
+-- drag logic (pc + mobile)
+do
+    local dragging, dragStart, startPos
+    local function update(input)
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
     end
-end)
-header.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement then
-        dragInput = input
-    end
-end)
-RunService.RenderStepped:Connect(function()
-    if dragging and dragInput then
-        local delta = dragInput.Position - dragStart
-        mainFrame.Position = startPos + UDim2.new(0, delta.X, 0, delta.Y)
-    end
-end)
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    header.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch) then
+            update(input)
+        end
+    end)
+end
 
--- Scrolling frame
 local scrollingFrame = Instance.new("ScrollingFrame")
 scrollingFrame.Size = UDim2.new(1, -10, 1, -70)
 scrollingFrame.Position = UDim2.new(0, 5, 0, 35)
@@ -76,38 +82,75 @@ end)
 -- === TOOL MANAGER ===
 local toolButtons = {}
 local activeTools = {}
-local useAllActive = false -- default off
+local globalSpam = false
 
--- Equip/Unequip helpers
-local function equipTool(tool)
-    if tool and tool.Parent == LocalPlayer.Backpack then
-        tool.Parent = LocalPlayer.Character
-    end
-end
-local function unequipTool(tool)
-    if tool and tool.Parent == LocalPlayer.Character then
-        tool.Parent = LocalPlayer.Backpack
-    end
-end
+-- global toggle
+local globalBtn = Instance.new("TextButton")
+globalBtn.Size = UDim2.new(0.9, 0, 0, 30)
+globalBtn.Position = UDim2.new(0.05, 0, 1, -35)
+globalBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+globalBtn.Text = "GLOBAL [OFF]"
+globalBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+globalBtn.Font = Enum.Font.GothamBold
+globalBtn.TextSize = 14
+globalBtn.Parent = mainFrame
+Instance.new("UICorner", globalBtn).CornerRadius = UDim.new(0, 6)
 
--- Create a tool button
+globalBtn.MouseButton1Click:Connect(function()
+    globalSpam = not globalSpam
+    globalBtn.Text = globalSpam and "GLOBAL [ON]" or "GLOBAL [OFF]"
+    globalBtn.BackgroundColor3 = globalSpam and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(100, 0, 0)
+end)
+
+-- spam loop
+RunService.Heartbeat:Connect(function()
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    -- global spam overrides everything
+    if globalSpam then
+        for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+            if tool:IsA("Tool") then tool.Parent = char end
+        end
+        for _, tool in ipairs(char:GetChildren()) do
+            if tool:IsA("Tool") then pcall(function() tool:Activate() end) end
+        end
+        return
+    end
+
+    -- per-tool spam
+    for tool, enabled in pairs(activeTools) do
+        if enabled then
+            if tool.Parent ~= char then tool.Parent = char end
+            pcall(function() tool:Activate() end)
+        end
+    end
+end)
+
+-- per-tool button creation
 local function createToolButton(tool)
     if toolButtons[tool] then return end
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(1, -10, 0, 30)
     button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.Text = tool.Name
+    button.Text = tool.Name .. " [OFF]"
     button.Font = Enum.Font.Gotham
     button.TextSize = 14
     button.Parent = scrollingFrame
     Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
 
-    -- Track in table
-    activeTools[tool] = false
-    toolButtons[tool] = button
+    button.MouseButton1Click:Connect(function()
+        activeTools[tool] = not activeTools[tool]
+        if activeTools[tool] then
+            button.Text = tool.Name .. " [ON]"
+            button.BackgroundColor3 = Color3.fromRGB(60, 0, 90)
+        else
+            button.Text = tool.Name .. " [OFF]"
+            button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        end
+    end)
 
-    -- Cleanup
     tool.AncestryChanged:Connect(function(_, parent)
         if not parent then
             activeTools[tool] = nil
@@ -115,20 +158,15 @@ local function createToolButton(tool)
             button:Destroy()
         end
     end)
+
+    toolButtons[tool] = button
 end
 
--- Refresh tool list (instant)
+-- refresh tools
 local function refreshTools()
-    -- Clear current buttons
-    for _, btn in pairs(toolButtons) do btn:Destroy() end
-    toolButtons = {}
-    activeTools = {}
-
-    -- Add backpack tools
     for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
         if tool:IsA("Tool") then createToolButton(tool) end
     end
-    -- Add character tools
     if LocalPlayer.Character then
         for _, tool in ipairs(LocalPlayer.Character:GetChildren()) do
             if tool:IsA("Tool") then createToolButton(tool) end
@@ -136,61 +174,17 @@ local function refreshTools()
     end
 end
 
--- Initial execute
-refreshTools()
-
--- Update on respawn
-LocalPlayer.CharacterAdded:Connect(function(char)
-    task.wait(0.5)
-    refreshTools()
-end)
 LocalPlayer.Backpack.ChildAdded:Connect(function(tool)
     if tool:IsA("Tool") then createToolButton(tool) end
 end)
-if LocalPlayer.Character then
-    LocalPlayer.Character.ChildAdded:Connect(function(tool)
+LocalPlayer.CharacterAdded:Connect(function(char)
+    char.ChildAdded:Connect(function(tool)
         if tool:IsA("Tool") then createToolButton(tool) end
     end)
-end
-
--- === USE ALL BUTTON ===
-local useAllBtn = Instance.new("TextButton")
-useAllBtn.Size = UDim2.new(1, -10, 0, 30)
-useAllBtn.Position = UDim2.new(0, 5, 1, -35)
-useAllBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
-useAllBtn.Text = "Use All [OFF]"
-useAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-useAllBtn.Font = Enum.Font.GothamBold
-useAllBtn.TextSize = 14
-useAllBtn.Parent = mainFrame
-Instance.new("UICorner", useAllBtn).CornerRadius = UDim.new(0, 6)
-
-useAllBtn.MouseButton1Click:Connect(function()
-    useAllActive = not useAllActive
-    if useAllActive then
-        useAllBtn.Text = "Use All [ON]"
-        useAllBtn.BackgroundColor3 = Color3.fromRGB(60, 0, 90)
-    else
-        useAllBtn.Text = "Use All [OFF]"
-        useAllBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
-    end
+    task.wait(1)
+    refreshTools()
 end)
 
--- === TOOL SPAM LOOP ===
-RunService.Heartbeat:Connect(function()
-    if useAllActive then
-        local char = LocalPlayer.Character
-        if char then
-            for tool, _ in pairs(activeTools) do
-                if tool and tool.Parent ~= char then
-                    equipTool(tool)
-                end
-                if tool then
-                    pcall(function() tool:Activate() end)
-                end
-            end
-        end
-    end
-end)
+refreshTools()
 
-print("⚡ USE TOOLS SPAWNER GUI Loaded ⚡")
+print("⚡ USE TOOLS SELECTOR GUI (Final) loaded ⚡")
