@@ -1,7 +1,3 @@
--- Ultra Hub v2.0 (single-file LocalScript)
--- Paste into StarterPlayerScripts or StarterGui (LocalScript)
--- Author: Generated (you). Upgraded: Adds pages, scrollable content, settings, theme editor, autosave, mobile scaling, fixed minimize, single-press run buttons.
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -22,7 +18,7 @@ local allowedIDs = {
     9407037318, -- Messi Alt
     9113218108, -- David Main
     9383251439, -- David Alt
-    2271342427. -- Kaiden
+    2271342427, -- Kaiden
     2057263511, -- Jacob
 
 }
@@ -707,8 +703,7 @@ toolsHeader.Parent = toolsPage
 
 local tools = {
     {"Get Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Tool%20Grabber"},
-    {"Tool UI (W.I.P)", "Nil"},
-    {"Use Tools Backup", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Use%20Tools%20(Back%20Up)"},
+    {"Use Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Use%20Tools%20(Back%20Up)"},
     {"OP No Cooldown", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20No%20Coooldown"},
     {"OP Insta-Kill", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Insta-Kill"},
     {"Kill Aura", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Kill%20Aura"},
@@ -1131,4 +1126,4 @@ end)
 -- expose HubAPI globally for console usage
 _G.UltraHub = HubAPI
 
-print("[UltraHub] Hub created — use HubAPI to add pages or control it.")
+print("[UltraHub] Hub created.")
