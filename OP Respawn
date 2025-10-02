@@ -1,55 +1,46 @@
--- ⚡ ULTRA-INSTANT RESPAWN v12 FIXED ⚡
+-- ⚡ ULTRA-INSTANT RESPAWN v13 ⚡
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
--- attempt respawn immediately
 local function forceRespawn()
-    if LocalPlayer:FindFirstChild("LoadCharacter") then
-        LocalPlayer:LoadCharacter()
-    elseif ReplicatedStorage:FindFirstChild("Guide") then
-        ReplicatedStorage.Guide:FireServer()
-    end
+	if LocalPlayer:FindFirstChild("LoadCharacter") then
+		LocalPlayer:LoadCharacter()
+	elseif ReplicatedStorage:FindFirstChild("Guide") then
+		ReplicatedStorage.Guide:FireServer()
+	end
 end
 
--- track character
-local function onCharacterAdded(char)
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
+local function hookCharacter(char)
+	local humanoid = char:WaitForChild("Humanoid", 1)
 
-    if not humanoid then
-        char.ChildAdded:Connect(function(c)
-            if c:IsA("Humanoid") then
-                humanoid = c
-            end
-        end)
-    end
+	-- Primary: humanoid.Died
+	humanoid.Died:Connect(forceRespawn)
 
-    -- Death detection — run once
-    local heartbeatConnection
-    heartbeatConnection = RunService.Heartbeat:Connect(function()
-        if humanoid and humanoid.Health <= 0 then
-            heartbeatConnection:Disconnect() -- stop loop
-            forceRespawn()
-        end
-    end)
+	-- Backup: frame-perfect heartbeat
+	local hbConn
+	hbConn = RunService.Heartbeat:Connect(function()
+		if humanoid.Health <= 0 then
+			hbConn:Disconnect()
+			forceRespawn()
+		end
+	end)
 
-    -- instant fallback: if humanoid is destroyed
-    char.ChildRemoved:Connect(function(c)
-        if c == humanoid then
-            heartbeatConnection:Disconnect()
-            forceRespawn()
-        end
-    end)
+	-- Fallback: if Humanoid removed
+	char.ChildRemoved:Connect(function(c)
+		if c == humanoid then
+			if hbConn then hbConn:Disconnect() end
+			forceRespawn()
+		end
+	end)
 end
 
-LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
-
--- if already loaded, hook immediately
+LocalPlayer.CharacterAdded:Connect(hookCharacter)
 if LocalPlayer.Character then
-    onCharacterAdded(LocalPlayer.Character)
+	hookCharacter(LocalPlayer.Character)
 else
-    forceRespawn()
+	forceRespawn()
 end
 
-print("⚡ ULTRA-INSTANT RESPAWN v12 FIXED loaded ⚡")
+print("⚡ Respawn v13 loaded (instant, frame-safe) ⚡")
