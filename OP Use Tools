@@ -1,0 +1,46 @@
+-- ⚡ USE TOOLS ULTRA SPAMMER v3 ⚡
+local player = game.Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local Heartbeat = RunService.Heartbeat
+
+local gui = Instance.new("ScreenGui", game.CoreGui)
+gui.Name = "UltraUseTools"
+gui.ResetOnSpawn = false
+
+local toggle = Instance.new("TextButton", gui)
+toggle.Size = UDim2.new(0, 120, 0, 50)
+toggle.Position = UDim2.new(0.5, -60, 1, -100)
+toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+toggle.Font = Enum.Font.GothamBlack
+toggle.Text = "OFF"
+toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggle.TextSize = 22
+Instance.new("UICorner", toggle).CornerRadius = UDim.new(0.3, 0)
+
+local attackEnabled = false
+
+local function toggleAttack()
+	attackEnabled = not attackEnabled
+	toggle.Text = attackEnabled and "ON" or "OFF"
+	toggle.BackgroundColor3 = attackEnabled and Color3.fromRGB(255,255,255) or Color3.fromRGB(0,0,0)
+	toggle.TextColor3 = attackEnabled and Color3.fromRGB(0,0,0) or Color3.fromRGB(255,255,255)
+end
+toggle.MouseButton1Click:Connect(toggleAttack)
+
+Heartbeat:Connect(function()
+	if not attackEnabled then return end
+	local char = player.Character
+	if not char then return end
+
+	-- equip backpack tools
+	for _, tool in ipairs(player.Backpack:GetChildren()) do
+		if tool:IsA("Tool") then tool.Parent = char end
+	end
+
+	-- activate all equipped tools
+	for _, tool in ipairs(char:GetChildren()) do
+		if tool:IsA("Tool") then pcall(function() tool:Activate() end) end
+	end
+end)
+
+print("⚡ Use Tools v3 loaded (global loop, instant spam) ⚡")
