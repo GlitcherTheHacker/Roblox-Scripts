@@ -46,4 +46,4 @@ task.spawn(function()
 	end
 end)
 
-print("No Cooldown + Remote Spammer running.")
+print("[✅ No Cooldown + Remote Spammer running.")
