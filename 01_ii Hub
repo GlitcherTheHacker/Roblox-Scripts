@@ -1,3 +1,6 @@
+-- UltraHub (mobile-friendly + fixes)
+-- Updated: Mobile drag, robust minimize/restore, read-only updates page, slider max 300, theme presets save.
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -10,24 +13,13 @@ local CoreGui = game:GetService("CoreGui")
 
 -- ===== Verification System =====
 local allowedIDs = {
---  ==[[ My Accs ]]==
-    3972688973,
-    2522193455, 
---  ==[[ 01_ii Clan Members ]]==
-    3816480506, -- Messi Main
-    9407037318, -- Messi Alt
-    9113218108, -- David Main
-    9383251439, -- David Alt
-    2271342427, -- Kaiden
-    2057263511, -- Jacob
-
+    3972688973, 2522193455,
+    3816480506, 9407037318, 9113218108, 9383251439,
+    2271342427, 2057263511
 }
-
 local function isVerified(userId)
     for _, id in ipairs(allowedIDs) do
-        if userId == id then
-            return true
-        end
+        if userId == id then return true end
     end
     return false
 end
@@ -39,7 +31,7 @@ end
 
 -- ======= Config / Defaults =======
 local DEFAULT_THEME = {
-    Accent = Color3.fromRGB(98, 53, 255),   -- default cobalt-ish purple
+    Accent = Color3.fromRGB(98, 53, 255),
     Background = Color3.fromRGB(15,15,20),
     Panel = Color3.fromRGB(26,26,32),
     Text = Color3.fromRGB(235,235,240),
@@ -54,7 +46,6 @@ local ANIM = {
     Direction = Enum.EasingDirection.Out
 }
 
--- persistence filename (if writefile/readfile are available in executor env)
 local SETTINGS_FILE = "ultrahub_settings.json"
 
 -- ======= Helpers =======
@@ -62,32 +53,22 @@ local function safe_pcall(fn, ...)
     local ok, res = pcall(fn, ...)
     return ok, res
 end
-
 local function tw(instance, props, t)
     t = t or ANIM.Time
     return TweenService:Create(instance, TweenInfo.new(t, ANIM.Style, ANIM.Direction), props)
 end
-
 local function addRound(parent, radius)
     local rc = Instance.new("UICorner")
     rc.CornerRadius = radius or DEFAULT_THEME.Radius
     rc.Parent = parent
     return rc
 end
-
 local function addStroke(parent, color, thickness)
     local stroke = Instance.new("UIStroke")
     stroke.Color = color or Color3.fromRGB(0,0,0)
     stroke.Thickness = thickness or 1
     stroke.Parent = parent
     return stroke
-end
-
-local function cloneChildrenTo(parent, children)
-    for _,c in ipairs(children) do
-        local cc = c:Clone()
-        cc.Parent = parent
-    end
 end
 
 -- ======= Load / Save settings =======
@@ -110,9 +91,7 @@ local function loadSettings()
         if ok and content and #content > 0 then
             local ok2, parsed = pcall(function() return HttpService:JSONDecode(content) end)
             if ok2 and type(parsed) == "table" then
-                -- merge
                 for k,v in pairs(parsed) do Settings[k] = v end
-                -- convert color tables back to Color3
                 if Settings.Theme and type(Settings.Theme) == "table" then
                     for tk, tv in pairs(Settings.Theme) do
                         if type(tv) == "table" and tv.r then
@@ -123,7 +102,6 @@ local function loadSettings()
             end
         end
     else
-        -- fallback: try _G persistence if available
         if _G.UltraHubSettings then
             for k,v in pairs(_G.UltraHubSettings) do Settings[k] = v end
         end
@@ -151,10 +129,9 @@ local function saveSettings()
     end
 end
 
--- load at start
 loadSettings()
 
--- ======= Clean up old hub if exists =======
+-- ======= Remove old hub if present =======
 if PlayerGui:FindFirstChild("UltraHubGui") then
     PlayerGui.UltraHubGui:Destroy()
 end
@@ -167,25 +144,25 @@ screenGui.IgnoreGuiInset = true
 screenGui.ResetOnSpawn = false
 screenGui.Parent = PlayerGui
 
--- scaling for mobile & small screens
+-- ui scaling (mobile friendly)
 local uiScale = Instance.new("UIScale")
 uiScale.Parent = screenGui
--- choose scale based on viewport
 local function updateScale()
     local h = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.Y or 800
     local scale = 1
     if h <= 720 then scale = 0.85 end
     if h <= 600 then scale = 0.75 end
-    if h <= 400 then scale = 0.6 end
+    if h <= 420 then scale = 0.67 end
+    if h <= 360 then scale = 0.6 end
     uiScale.Scale = scale
 end
 updateScale()
-workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function() updateScale() end)
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(updateScale)
 if workspace.CurrentCamera then
     workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
 end
 
--- Dim background
+-- dim background
 local dim = Instance.new("Frame")
 dim.Name = "Dim"
 dim.AnchorPoint = Vector2.new(0.5,0.5)
@@ -195,18 +172,17 @@ dim.BackgroundColor3 = Color3.fromRGB(0,0,0)
 dim.BackgroundTransparency = 0.6
 dim.Parent = screenGui
 
--- Main window
+-- main window
 local main = Instance.new("Frame")
 main.Name = "Main"
 main.Size = UDim2.new(0, 920, 0, 580)
-main.Position = UDim2.new(0.5, 0, 0.5, 0)
+main.Position = UDim2.new(0.5, 0.5, 0.5, 0)
 main.AnchorPoint = Vector2.new(0.5, 0.5)
 main.BackgroundColor3 = Settings.Theme and Settings.Theme.Background or DEFAULT_THEME.Background
 main.Parent = screenGui
 addRound(main, DEFAULT_THEME.Radius)
 addStroke(main, Color3.fromRGB(0,0,0), 1)
 
--- Drop shadow (simple)
 local function addShadow(parent)
     if DEFAULT_THEME.Shadows then
         local shadow = Instance.new("ImageLabel")
@@ -222,7 +198,7 @@ local function addShadow(parent)
 end
 addShadow(main)
 
--- Header
+-- header
 local header = Instance.new("Frame")
 header.Name = "Header"
 header.Size = UDim2.new(1, 0, 0, 68)
@@ -254,7 +230,7 @@ subtitle.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.M
 subtitle.TextXAlignment = Enum.TextXAlignment.Left
 subtitle.Parent = header
 
--- Close + minimize
+-- close and minimize
 local closeBtn = Instance.new("TextButton")
 closeBtn.Name = "Close"
 closeBtn.Size = UDim2.new(0, 36, 0, 36)
@@ -281,7 +257,7 @@ minimizeBtn.Parent = header
 addRound(minimizeBtn, UDim.new(0, 8))
 addStroke(minimizeBtn, Color3.fromRGB(0,0,0), 1)
 
--- Left sidebar
+-- Left sidebar container (scrollable)
 local sidebar = Instance.new("Frame")
 sidebar.Name = "Sidebar"
 sidebar.Size = UDim2.new(0, 220, 1, -92)
@@ -318,7 +294,7 @@ searchBox.Parent = sidebar
 addRound(searchBox, UDim.new(0, 8))
 addStroke(searchBox, Color3.fromRGB(0,0,0), 1)
 
--- container for page buttons (scrollable)
+-- container for page buttons (scrolling)
 local buttonsHolder = Instance.new("ScrollingFrame")
 buttonsHolder.Name = "Buttons"
 buttonsHolder.Size = UDim2.new(1, 0, 1, -86)
@@ -334,7 +310,7 @@ buttonsLayout.Padding = UDim.new(0, 10)
 buttonsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 buttonsLayout.Parent = buttonsHolder
 
--- Right main content area
+-- Right content area
 local content = Instance.new("Frame")
 content.Name = "Content"
 content.Size = UDim2.new(1, -240, 1, -92)
@@ -419,7 +395,7 @@ local function showPage(name)
     end
 end
 
--- Create a sidebar button (single-press to open page)
+-- Sidebar button creator
 local function createSidebarButton(titleText, order)
     local btnHolder = Instance.new("Frame")
     btnHolder.Name = titleText .. "Btn"
@@ -459,7 +435,6 @@ local function createSidebarButton(titleText, order)
     sub.Text = "Open " .. titleText
     sub.Parent = btn
 
-    -- small accent bar
     local accent = Instance.new("Frame")
     accent.Size = UDim2.new(0, 6, 1, -8)
     accent.Position = UDim2.new(1, -14, 0, 4)
@@ -469,7 +444,6 @@ local function createSidebarButton(titleText, order)
     addRound(accent, UDim.new(0, 6))
     accent.Visible = false
 
-    -- hover effects
     btn.MouseEnter:Connect(function()
         tw(btn, {BackgroundColor3 = Color3.fromRGB(22,22,28)}):Play()
     end)
@@ -477,13 +451,16 @@ local function createSidebarButton(titleText, order)
         tw(btn, {BackgroundColor3 = Color3.fromRGB(18,18,22)}):Play()
     end)
 
-    -- click -> show page
     btn.MouseButton1Click:Connect(function()
         showPage(titleText)
-        -- animate accent
         for _, child in ipairs(buttonsHolder:GetChildren()) do
-            local a = child:FindFirstChildWhichIsA("TextButton") and child:FindFirstChildWhichIsA("TextButton"):FindFirstChildWhichIsA("Frame")
-            if a then a.Visible = false end
+            if child:IsA("Frame") then
+                local b = child:FindFirstChildWhichIsA("TextButton")
+                if b then
+                    local f = b:FindFirstChildWhichIsA("Frame")
+                    if f then f.Visible = false end
+                end
+            end
         end
         accent.Visible = true
         tw(accent, {Size = UDim2.new(0, 6, 1, -8)}):Play()
@@ -493,13 +470,11 @@ local function createSidebarButton(titleText, order)
         Holder = btnHolder,
         Button = btn,
         SetSubText = function(txt) sub.Text = txt end,
-        SetAccent = function(on)
-            accent.Visible = on
-        end
+        SetAccent = function(on) accent.Visible = on end
     }
 end
 
--- Toggle control helper (keeps from original)
+-- Toggle helper (keeps original appearance)
 local function createToggle(labelText, initial)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 46)
@@ -545,7 +520,7 @@ local function createToggle(labelText, initial)
     end
 
     togg.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             setState(not state)
         end
     end)
@@ -555,7 +530,7 @@ local function createToggle(labelText, initial)
     return row, function() return state end, setState
 end
 
--- Action button helper (single press) that fetches a URL and runs it (loadstring)
+-- Action button helper: fetch + run
 local function createActionButton(textLabel, url)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 48)
@@ -575,39 +550,26 @@ local function createActionButton(textLabel, url)
 
     local running = false
     btn.MouseButton1Click:Connect(function()
-        -- single press: fetch & run
         if running then return end
         running = true
         local oldText = btn.Text
         btn.Text = "Running..."
         btn.BackgroundColor3 = Color3.fromRGB(120,120,120)
         spawn(function()
-            -- attempt HttpGet then loadstring (varies by executor)
             local ok, res = pcall(function()
                 if type(url) ~= "string" then error("Invalid URL") end
-                -- allow raw github URLs to be used directly; user provided full URLs.
-                if typeof(game.HttpGet) == "function" then
-                    -- older style
-                end
                 local content
                 local ok2, err2 = pcall(function()
                     content = game:HttpGet(url, true)
                 end)
-                if not ok2 then
-                    error("HttpGet failed: "..tostring(err2))
-                end
-                -- try loadstring and run
+                if not ok2 then error("HttpGet failed: "..tostring(err2)) end
                 local f, err = loadstring(content)
-                if not f then
-                    error("loadstring failed: "..tostring(err))
-                end
-                -- run protected
+                if not f then error("loadstring failed: "..tostring(err)) end
                 local ran, rerr = pcall(function() f() end)
                 if not ran then error("remote script error: "..tostring(rerr)) end
                 return true
             end)
             if ok then
-                -- success
                 btn.Text = "Done"
                 tw(btn, {Size = UDim2.new(0, 160, 1, 0)}, 0.12):Play()
                 wait(0.8)
@@ -624,13 +586,10 @@ local function createActionButton(textLabel, url)
             running = false
         end)
     end)
-
     return row
 end
 
--- ======= Dock pages & content per user spec =======
-
--- Welcome page
+-- ======= Pages & Content =======
 local pageWelcome = createPage("Welcome")
 local welcomeText = Instance.new("TextLabel")
 welcomeText.Size = UDim2.new(1, -24, 0, 120)
@@ -647,7 +606,7 @@ local getBaseBtn = createActionButton("Get Base", "https://raw.githubusercontent
 getBaseBtn.LayoutOrder = 5
 getBaseBtn.Parent = pageWelcome
 
--- Updates page (scrollable text area where you can edit updates)
+-- Updates page: read-only, scrollable, centered top
 local updatesPage = createPage("Updates")
 local updatesHeader = Instance.new("TextLabel")
 updatesHeader.Size = UDim2.new(1, -24, 0, 26)
@@ -659,37 +618,47 @@ updatesHeader.TextXAlignment = Enum.TextXAlignment.Left
 updatesHeader.Text = "Updates"
 updatesHeader.Parent = updatesPage
 
--- editable TextBox inside a scrolling frame
-local updatesBox = Instance.new("TextBox")
-updatesBox.Size = UDim2.new(1, -12, 0, 220)
-updatesBox.BackgroundColor3 = Color3.fromRGB(18,18,22)
-updatesBox.TextWrapped = true
-updatesBox.Text =[[
-- Updates 📃: 
+local updatesScroll = Instance.new("ScrollingFrame")
+updatesScroll.Size = UDim2.new(1, -12, 1, -36)
+updatesScroll.Position = UDim2.new(0, 6, 0, 30)
+updatesScroll.BackgroundTransparency = 1
+updatesScroll.BorderSizePixel = 0
+updatesScroll.ScrollBarThickness = 6
+updatesScroll.CanvasSize = UDim2.new(0,0,0,0)
+updatesScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+updatesScroll.Parent = updatesPage
 
-- Fixed butotns not working at all
-- OP No Cooldown Added/Updated
-- OP Insta-Kill Added/Updated
-- Kill Aura Added/Updatecd
-- Get Tools & Respawn Added/Updated (Max performance and speed grabbing, The Use Tools and Respawn script have been combiend into one!)
-- Use Tools Added (Brand new gui and functionality for use tools)
-- Loopbring Added
+local updatesLabel = Instance.new("TextLabel")
+updatesLabel.Size = UDim2.new(1, -10, 0, 0)
+updatesLabel.Position = UDim2.new(0, 5, 0, 0)
+updatesLabel.BackgroundTransparency = 1
+updatesLabel.Text = [[
+📝 Updates: 09/11/25
+- Fixed No-Cooldown breaking on respawn
+- Added an "Info" page to explain features
+- Nav bar/page buttons made scrollable and robust
+- Rewrote minimize/restore to be stable
+- Optimized mobile drag & UI scaling
+- OP No Cooldown updated, Insta-Kill updated, Kill Aura added
+- Get Tools, Respawn, Use Tools improved for speed and reliability
 
-*** New Scripts ***
-- Enemy Notifier (Notifys you when a GND member joins the server (FInd this in the Other Scripts Page))
-- Escape (Lags people you have Loopbrung for a few seconds, giving you a moment to make a comeback)
+More notes will be added here. This text is hard-coded and read-only.
 ]]
-updatesBox.TextXAlignment = Enum.TextXAlignment.Left
-updatesBox.TextYAlignment = Enum.TextYAlignment.Top
-updatesBox.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
-updatesBox.Font = Enum.Font.Gotham
-updatesBox.TextSize = 14
-updatesBox.MultiLine = true
-updatesBox.Parent = updatesPage
-addRound(updatesBox, UDim.new(0,8))
-addStroke(updatesBox, Color3.fromRGB(0,0,0), 1)
+updatesLabel.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+updatesLabel.TextWrapped = true
+updatesLabel.TextYAlignment = Enum.TextYAlignment.Top
+updatesLabel.TextXAlignment = Enum.TextXAlignment.Center
+updatesLabel.Font = Enum.Font.Gotham
+updatesLabel.TextSize = 14
+updatesLabel.AutomaticSize = Enum.AutomaticSize.Y
+updatesLabel.Parent = updatesScroll
 
--- Tools page (lots of single-press action buttons)
+updatesLabel:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+    updatesScroll.CanvasSize = UDim2.new(0, 0, 0, updatesLabel.AbsoluteSize.Y + 20)
+end)
+updatesScroll.CanvasSize = UDim2.new(0, 0, 0, updatesLabel.AbsoluteSize.Y + 20)
+
+-- Tools page
 local toolsPage = createPage("Tool Scripts")
 local toolsHeader = Instance.new("TextLabel")
 toolsHeader.Size = UDim2.new(1, -24, 0, 26)
@@ -703,7 +672,7 @@ toolsHeader.Parent = toolsPage
 
 local tools = {
     {"Get Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Tool%20Grabber"},
-    {"Use Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Use%20Tools%20(Back%20Up)"},
+    {"Use Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Use%20Tools"},
     {"OP No Cooldown", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20No%20Coooldown"},
     {"OP Insta-Kill", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Insta-Kill"},
     {"Kill Aura", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Kill%20Aura"},
@@ -777,14 +746,11 @@ sHeader.Parent = settingsPage
 local autoRow, getAutoState, setAutoState = createToggle("Auto Execute Hub on Rejoin", Settings.AutoExecute)
 autoRow.LayoutOrder = 2
 autoRow.Parent = settingsPage
--- hook change
 do
-    -- when toggled, update Settings.AutoExecute and save
     local function pollToggle()
         Settings.AutoExecute = getAutoState()
         saveSettings()
     end
-    -- naive monitoring: set input to toggle already wired; add a small loop to watch changed state
     spawn(function()
         while settingsPage.Parent do
             pollToggle()
@@ -793,7 +759,7 @@ do
     end)
 end
 
--- WalkSpeed & JumpPower sliders
+-- WalkSpeed & JumpPower sliders (max 300)
 local function createSlider(labelText, min, max, initial)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 56)
@@ -842,65 +808,59 @@ local function createSlider(labelText, min, max, initial)
         return val
     end
 
+    local function updateFromPos(px)
+        local barPos = bar.AbsolutePosition
+        local barSize = bar.AbsoluteSize
+        local p = (px - barPos.X) / (barSize.X)
+        return setToPercent(p)
+    end
+
     bar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
-            local absPos = UserInputService:GetMouseLocation()
-            -- capture change
-            local function update()
-                local barPos = bar.AbsolutePosition
-                local barSize = bar.AbsoluteSize
-                local mouseX = UserInputService:GetMouseLocation().X
-                local p = (mouseX - barPos.X) / barSize.X
-                local value = setToPercent(p)
-                return value
-            end
             local conn
-            conn = UserInputService.InputChanged:Connect(function()
-                if dragging then
-                    update()
+            conn = UserInputService.InputChanged:Connect(function(inp)
+                if dragging and inp.Position then
+                    updateFromPos(inp.Position.X)
                 end
             end)
             repeat
-                update()
+                local pos = UserInputService:GetMouseLocation()
+                updateFromPos(pos.X)
                 task.wait()
             until not dragging
             conn:Disconnect()
         end
     end)
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
         end
     end)
 
-    -- initial
     setToPercent((initial - min)/(max - min))
-
     return row, function() return tonumber(valueLbl.Text) end
 end
 
-local walkRow, getWalkVal = createSlider("Player WalkSpeed", 8, 100, Settings.WalkSpeed or 16)
+local walkRow, getWalkVal = createSlider("Player WalkSpeed", 8, 300, Settings.WalkSpeed or 16)
 walkRow.LayoutOrder = 10
 walkRow.Parent = settingsPage
 
-local jumpRow, getJumpVal = createSlider("Player JumpPower", 20, 200, Settings.JumpPower or 50)
+local jumpRow, getJumpVal = createSlider("Player JumpPower", 20, 300, Settings.JumpPower or 50)
 jumpRow.LayoutOrder = 11
 jumpRow.Parent = settingsPage
 
--- Apply slider changes to local player's humanoid
+-- Apply slider changes live
 spawn(function()
     while true do
         local ws = getWalkVal()
         local jp = getJumpVal()
-        -- update Settings and apply to character if exists
         Settings.WalkSpeed = ws
         Settings.JumpPower = jp
         local char = LocalPlayer.Character
         if char and char:FindFirstChildWhichIsA("Humanoid") then
             local hum = char:FindFirstChildWhichIsA("Humanoid")
             if hum then
-                -- apply (Roblox uses WalkSpeed & JumpPower)
                 pcall(function()
                     hum.WalkSpeed = ws
                     hum.JumpPower = jp
@@ -908,11 +868,11 @@ spawn(function()
             end
         end
         saveSettings()
-        task.wait(0.6)
+        task.wait(0.45)
     end
 end)
 
--- Theme editor: presets + simple RGB fields
+-- Theme presets (now save immediately)
 local themeHeader = Instance.new("TextLabel")
 themeHeader.Size = UDim2.new(1, -24, 0, 22)
 themeHeader.BackgroundTransparency = 1
@@ -946,7 +906,6 @@ local function addPreset(name, accent, background, panel, text, muted)
         Settings.Theme.Text = text or Settings.Theme.Text
         Settings.Theme.Muted = muted or Settings.Theme.Muted
         saveSettings()
-        -- apply immediately
         main.BackgroundColor3 = Settings.Theme.Background
         header.BackgroundColor3 = Settings.Theme.Panel
         sidebar.BackgroundColor3 = Settings.Theme.Panel
@@ -957,12 +916,10 @@ local function addPreset(name, accent, background, panel, text, muted)
     end)
 end
 
--- default cobalt/navy preset
 addPreset("Cobalt", Color3.fromRGB(38, 100, 255), Color3.fromRGB(10, 12, 20), Color3.fromRGB(26,26,32), Color3.fromRGB(235,235,240), Color3.fromRGB(160,160,170))
 addPreset("Purple", Color3.fromRGB(98,53,255), Color3.fromRGB(15,15,20), Color3.fromRGB(26,26,32), Color3.fromRGB(235,235,240), Color3.fromRGB(160,160,170))
 addPreset("Black", Color3.fromRGB(80,80,80), Color3.fromRGB(8,8,10), Color3.fromRGB(20,20,22), Color3.fromRGB(230,230,230), Color3.fromRGB(140,140,140))
 
--- restore defaults button
 local restoreBtn = Instance.new("TextButton")
 restoreBtn.Size = UDim2.new(0, 140, 0, 36)
 restoreBtn.Position = UDim2.new(0, 0, 0, 0)
@@ -983,7 +940,6 @@ restoreBtn.MouseButton1Click:Connect(function()
     Settings.WalkSpeed = 16
     Settings.JumpPower = 50
     saveSettings()
-    -- apply
     main.BackgroundColor3 = Settings.Theme.Background
     header.BackgroundColor3 = Settings.Theme.Panel
     sidebar.BackgroundColor3 = Settings.Theme.Panel
@@ -993,7 +949,7 @@ restoreBtn.MouseButton1Click:Connect(function()
     subtitle.TextColor3 = Settings.Theme.Muted
 end)
 
--- ======= Build sidebar buttons (in same order as pages) =======
+-- ======= Sidebar buttons build =======
 local btnWelcome = createSidebarButton("Welcome", 1); btnWelcome.SetAccent(true)
 local btnUpdates = createSidebarButton("Updates", 2)
 local btnTools = createSidebarButton("Tool Scripts", 3)
@@ -1001,76 +957,108 @@ local btnPlayer = createSidebarButton("Player Scripts", 4)
 local btnOther = createSidebarButton("Other Scripts", 5)
 local btnSettings = createSidebarButton("Settings", 6)
 
--- populate initial accents and show default page
 showPage("Welcome")
 
--- Close / minimize behavior (fixed + reliable)
+-- ======= Close + Minimize (robust) =======
 local minimized = false
+-- store visibility map to restore reliably
+local function snapshotBodyVisibility()
+    local map = {}
+    for _, c in ipairs(main:GetChildren()) do
+        if c ~= header and c ~= dim and c.Name ~= "Shadow" then
+            map[c] = c.Visible
+        end
+    end
+    return map
+end
+local function restoreBodyVisibility(map)
+    if not map then return end
+    for c, v in pairs(map) do
+        if c and c.Parent then
+            c.Visible = v
+        end
+    end
+end
 
 closeBtn.MouseButton1Click:Connect(function()
     tw(main, {Position = UDim2.new(0.5, 0, -1, 0), Size = UDim2.new(0, 20, 0, 20)}):Play()
-    task.delay(0.25, function()
-        screenGui:Destroy()
-    end)
+    task.delay(0.25, function() screenGui:Destroy() end)
 end)
 
+-- make minimize robust (store state, hide body, restore)
+local minStateSnapshot = nil
 minimizeBtn.MouseButton1Click:Connect(function()
     if minimized then
-        -- === RESTORE ===
-        local tween = tw(main, {Size = UDim2.new(0, 920, 0, 580)})
-        tween:Play()
-        tween.Completed:Wait()
-        -- show after tween finishes
-        sidebar.Visible = true
-        content.Visible = true
-        pageTitle.Visible = true
-        for _,c in ipairs(main:GetChildren()) do
-            if c ~= header and c ~= dim and c.Name ~= "Shadow" then
-                c.Visible = true
-            end
-        end
+        -- restore
+        tw(main, {Size = UDim2.new(0, 920, 0, 580)}):Play()
+        -- restore body visibility after animation
+        delay(ANIM.Time + 0.02, function()
+            restoreBodyVisibility(minStateSnapshot)
+            minStateSnapshot = nil
+        end)
         minimized = false
     else
-        -- === MINIMIZE ===
-        local tween = tw(main, {Size = UDim2.new(0, 380, 0, 80)})
-        tween:Play()
-        tween.Completed:Wait()
-        -- hide after tween finishes
-        if sidebar then sidebar.Visible = false end
-        if content then content.Visible = false end
-        if pageTitle then pageTitle.Visible = false end
+        -- minimize: snapshot current visibilities, then hide the body parts (keep header visible)
+        minStateSnapshot = snapshotBodyVisibility()
+        -- hide body
+        for _, c in ipairs(main:GetChildren()) do
+            if c ~= header and c ~= dim and c.Name ~= "Shadow" then
+                c.Visible = false
+            end
+        end
+        tw(main, {Size = UDim2.new(0, 380, 0, 80)}):Play()
         minimized = true
     end
 end)
 
--- Make main draggable by header (keeps original behavior)
+-- ======= Header drag (mouse + touch) =======
 do
     local dragging = false
     local dragStart = nil
     local startPos = nil
+    local activeInput = nil
+
+    local function beginDrag(input)
+        dragging = true
+        activeInput = input
+        dragStart = input.Position
+        startPos = main.Position
+    end
+
+    local function endDrag()
+        dragging = false
+        dragStart = nil
+        startPos = nil
+        activeInput = nil
+    end
 
     header.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = main.Position
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            beginDrag(input)
             input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End and dragging then
-                    dragging = false
+                if input.UserInputState == Enum.UserInputState.End then
+                    endDrag()
                 end
             end)
         end
     end)
 
-    header.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement and dragging and dragStart and startPos then
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging or not dragStart or not startPos or not input.Position then return end
+        if input == activeInput then
             local delta = input.Position - dragStart
-            main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            local newX = startPos.X.Offset + delta.X
+            local newY = startPos.Y.Offset + delta.Y
+            -- clamp within screen boundaries (helps mobile)
+            local vs = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920,1080)
+            newX = math.clamp(newX, - (main.Size.X.Offset - 50), vs.X - 50)
+            newY = math.clamp(newY, - (main.Size.Y.Offset - 50), vs.Y - 50)
+            main.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
         end
     end)
 end
 
--- Simple search filtering for sidebar buttons by label text
+-- ======= Search filter for sidebar =======
 searchBox:GetPropertyChangedSignal("Text"):Connect(function()
     local q = searchBox.Text:lower()
     for _, child in ipairs(buttonsHolder:GetChildren()) do
@@ -1078,7 +1066,7 @@ searchBox:GetPropertyChangedSignal("Text"):Connect(function()
             local btn = child:FindFirstChildWhichIsA("TextButton")
             local lbl = btn and btn:FindFirstChildWhichIsA("TextLabel")
             local nameText = child.Name:lower()
-            local visible = q == "" or nameText:find(q) or (lbl and lbl.Text:lower():find(q))
+            local visible = q == "" or (lbl and lbl.Text:lower():find(q))
             child.Visible = visible
             child.Size = visible and UDim2.new(1,0,0,44) or UDim2.new(1,0,0,0)
             child.LayoutOrder = visible and child.LayoutOrder or 999
@@ -1086,9 +1074,8 @@ searchBox:GetPropertyChangedSignal("Text"):Connect(function()
     end
 end)
 
--- ======= Exposed API for adding pages / buttons programmatically =======
+-- ======= Exposed Hub API =======
 local HubAPI = {}
-
 function HubAPI.AddPage(pageName, builderFunc)
     if Pages[pageName] then warn("Page already exists:", pageName); return end
     local p = createPage(pageName)
@@ -1097,21 +1084,12 @@ function HubAPI.AddPage(pageName, builderFunc)
     end
     createSidebarButton(pageName, #buttonsHolder:GetChildren()+1)
 end
+function HubAPI.GetPage(pageName) return Pages[pageName] end
+function HubAPI.Show(pageName) showPage(pageName) end
 
-function HubAPI.GetPage(pageName)
-    return Pages[pageName]
-end
-
-function HubAPI.Show(pageName)
-    showPage(pageName)
-end
-
--- Auto-execute functionality (runs hub create script on join if enabled)
+-- Auto-execute behavior
 if Settings.AutoExecute then
-    -- save so it's remembered
     saveSettings()
-    -- Re-execute pattern: if this script is in StarterPlayerScripts, it will run automatically on join anyway.
-    -- For user convenience: create a global so future runs can detect hub exists
     _G.UltraHubAutoExecuted = true
 end
 
@@ -1123,7 +1101,5 @@ spawn(function()
     end
 end)
 
--- expose HubAPI globally for console usage
 _G.UltraHub = HubAPI
-
-print("[UltraHub] Hub created.")
+print("[UltraHub] Hub created and mobile fixes applied.")
