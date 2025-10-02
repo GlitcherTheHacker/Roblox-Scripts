@@ -1,59 +1,49 @@
--- ⚡ No Cooldown (Super OP, Remote + Tool Spam) ⚡
-
-local Players = game:GetService("Players")
+-- ⚡ No Cooldown (Ultra Aggressive)
 local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
 
--- Aggressive wait overrides
 hookfunction(wait, function()
 	return RunService.PostSimulation:Wait()
 end)
+
 hookfunction(task.wait, function()
 	return RunService.PostSimulation:Wait()
 end)
+
 hookfunction(delay, function(_, func)
 	task.spawn(func)
 end)
+
 hookfunction(spawn, function(func)
 	task.spawn(func)
 end)
 
--- Main spam loop
-local function startNoCooldown()
-	task.spawn(function()
-		while true do
-			local char = LocalPlayer.Character
-			if char then
-				for _, tool in ipairs(char:GetChildren()) do
-					if tool:IsA("Tool") then
-						-- Force equip + activate
-						tool:Activate()
-						if tool.Parent ~= char then
-							tool.Parent = char
-						end
+-- 🔁 FightEvent Ultra Spammer
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
-						-- Spam FightEvent if it exists
-						local fightEvent = tool:FindFirstChild("FightEvent")
-						if fightEvent then
-							fightEvent:FireServer()
-						end
-					end
+task.spawn(function()
+	while true do
+		task.wait() -- Runs as fast as Roblox allows with PostSimulation
+
+		local character = LocalPlayer.Character
+		if not character then continue end
+
+		local hrp = character:FindFirstChild("HumanoidRootPart")
+		local tool = character:FindFirstChildOfClass("Tool")
+		if not hrp or not tool then continue end
+
+		local fightEvent = tool:FindFirstChild("FightEvent")
+		if not fightEvent then continue end
+
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer and player.Character then
+				local enemyHRP = player.Character:FindFirstChild("HumanoidRootPart")
+				if enemyHRP and (hrp.Position - enemyHRP.Position).Magnitude <= 20 then
+					fightEvent:FireServer(enemyHRP)
 				end
 			end
-			-- ⚠️ Key: this delay controls ping vs. power
-			RunService.Heartbeat:Wait() -- fastest safe loop (can tweak to PostSimulation)
 		end
-	end)
-end
-
--- Start when character spawns
-LocalPlayer.CharacterAdded:Connect(function()
-	task.wait(0.5)
-	startNoCooldown()
+	end
 end)
 
-if LocalPlayer.Character then
-	startNoCooldown()
-end
-
-print("⚔️ Ultra No Cooldown Loaded — Frame-Locked Max Power ⚔️")
+print("No Cooldown + Remote Spammer running.")
