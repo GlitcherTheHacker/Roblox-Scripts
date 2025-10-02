@@ -1,5 +1,5 @@
 _G.HeadSize = 10
-_G.HitboxSize = Vector3.new(25, 25, 25) -- Tamaño del hitbox
+_G.HitboxSize = Vector3.new(10, 10, 10) -- Tamaño del hitbox
 _G.Disabled = false
 _G.ToggleKey = Enum.KeyCode.H -- Tecla para habilitar/deshabilitar el hitbox
 
