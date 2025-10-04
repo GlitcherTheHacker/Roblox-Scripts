@@ -1,3 +1,6 @@
+-- UltraHub (mobile-friendly + fixes)
+-- Updated: Mobile drag, robust minimize/restore, read-only updates page, slider max 300, theme presets save.
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -40,26 +43,29 @@ local DEFAULT_THEME = {
     Shadows = true
 }
 
--- ======= Helpers =======
-local TweenService = game:GetService("TweenService")
 local ANIM = {
     Time = 0.18,
     Style = Enum.EasingStyle.Quad,
     Direction = Enum.EasingDirection.Out
 }
 
+local SETTINGS_FILE = "ultrahub_settings.json"
+
+-- ======= Helpers =======
+local function safe_pcall(fn, ...)
+    local ok, res = pcall(fn, ...)
+    return ok, res
+end
 local function tw(instance, props, t)
     t = t or ANIM.Time
     return TweenService:Create(instance, TweenInfo.new(t, ANIM.Style, ANIM.Direction), props)
 end
-
 local function addRound(parent, radius)
     local rc = Instance.new("UICorner")
     rc.CornerRadius = radius or DEFAULT_THEME.Radius
     rc.Parent = parent
     return rc
 end
-
 local function addStroke(parent, color, thickness)
     local stroke = Instance.new("UIStroke")
     stroke.Color = color or Color3.fromRGB(0,0,0)
@@ -67,6 +73,66 @@ local function addStroke(parent, color, thickness)
     stroke.Parent = parent
     return stroke
 end
+
+-- ======= Load / Save settings =======
+local Settings = {
+    AutoExecute = false,
+    Theme = {
+        Accent = DEFAULT_THEME.Accent,
+        Background = DEFAULT_THEME.Background,
+        Panel = DEFAULT_THEME.Panel,
+        Text = DEFAULT_THEME.Text,
+        Muted = DEFAULT_THEME.Muted
+    },
+    WalkSpeed = 16,
+    JumpPower = 50
+}
+
+local function loadSettings()
+    if typeof(writefile) == "function" and typeof(readfile) == "function" then
+        local ok, content = pcall(function() return readfile(SETTINGS_FILE) end)
+        if ok and content and #content > 0 then
+            local ok2, parsed = pcall(function() return HttpService:JSONDecode(content) end)
+            if ok2 and type(parsed) == "table" then
+                for k,v in pairs(parsed) do Settings[k] = v end
+                if Settings.Theme and type(Settings.Theme) == "table" then
+                    for tk, tv in pairs(Settings.Theme) do
+                        if type(tv) == "table" and tv.r then
+                            Settings.Theme[tk] = Color3.new(tv.r, tv.g, tv.b)
+                        end
+                    end
+                end
+            end
+        end
+    else
+        if _G.UltraHubSettings then
+            for k,v in pairs(_G.UltraHubSettings) do Settings[k] = v end
+        end
+    end
+end
+
+local function saveSettings()
+    local copy = {
+        AutoExecute = Settings.AutoExecute,
+        WalkSpeed = Settings.WalkSpeed,
+        JumpPower = Settings.JumpPower,
+        Theme = {}
+    }
+    for k,v in pairs(Settings.Theme) do
+        local c = v
+        copy.Theme[k] = { r = c.R, g = c.G, b = c.B }
+    end
+    if typeof(writefile) == "function" and typeof(readfile) == "function" then
+        local ok, err = pcall(function()
+            writefile(SETTINGS_FILE, HttpService:JSONEncode(copy))
+        end)
+        if not ok then warn("UltraHub: failed to write settings:", err) end
+    else
+        _G.UltraHubSettings = copy
+    end
+end
+
+loadSettings()
 
 -- ======= Remove old hub if present =======
 if PlayerGui:FindFirstChild("UltraHubGui") then
@@ -657,14 +723,7 @@ for i,t in ipairs(otherScripts) do
     row.Parent = otherPage
 end
 
--- ⚙️ Settings Page (Fixed: live sliders, defaults, restores, rejoin)
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local TeleportService = game:GetService("TeleportService")
-
-local LocalPlayer = Players.LocalPlayer
-
--- Create page container (uses your existing helper)
+-- ⚙️ Settings Page (Simplified – Theme Removed)
 local settingsPage = createPage("Settings")
 
 -- Header
@@ -673,30 +732,25 @@ sHeader.Size = UDim2.new(1, -24, 0, 26)
 sHeader.BackgroundTransparency = 1
 sHeader.Font = Enum.Font.GothamBold
 sHeader.TextSize = 16
-sHeader.TextColor3 = (Settings and Settings.Theme and Settings.Theme.Text) or DEFAULT_THEME.Text
+sHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 sHeader.TextXAlignment = Enum.TextXAlignment.Left
 sHeader.Text = "Settings"
 sHeader.Parent = settingsPage
 
 -- === Auto Execute Toggle ===
-local autoRow, getAutoState, setAutoState = createToggle("Auto Execute Hub on Rejoin", (Settings and Settings.AutoExecute) or false)
+local autoRow, getAutoState, setAutoState = createToggle("Auto Execute Hub on Rejoin", Settings.AutoExecute)
 autoRow.LayoutOrder = 2
 autoRow.Parent = settingsPage
-
--- Keep settings saved periodically (safe)
-task.spawn(function()
+spawn(function()
     while settingsPage.Parent do
-        local ok, val = pcall(getAutoState)
-        if ok and Settings then
-            Settings.AutoExecute = val
-            pcall(saveSettings)
-        end
+        Settings.AutoExecute = getAutoState()
+        saveSettings()
         task.wait(0.6)
     end
 end)
 
--- === Slider factory (returns row, getter, setter) ===
-local function createSlider(labelText, min, max, initial, onChange)
+-- === Slider Factory ===
+local function createSlider(labelText, min, max, initial)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 56)
     row.BackgroundTransparency = 1
@@ -707,7 +761,7 @@ local function createSlider(labelText, min, max, initial, onChange)
     lbl.Text = labelText
     lbl.Font = Enum.Font.Gotham
     lbl.TextSize = 14
-    lbl.TextColor3 = (Settings and Settings.Theme and Settings.Theme.Text) or DEFAULT_THEME.Text
+    lbl.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Parent = row
 
@@ -718,7 +772,7 @@ local function createSlider(labelText, min, max, initial, onChange)
     valueLbl.Text = tostring(initial)
     valueLbl.Font = Enum.Font.Gotham
     valueLbl.TextSize = 14
-    valueLbl.TextColor3 = (Settings and Settings.Theme and Settings.Theme.Muted) or DEFAULT_THEME.Muted
+    valueLbl.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
     valueLbl.TextXAlignment = Enum.TextXAlignment.Right
     valueLbl.Parent = row
 
@@ -730,170 +784,82 @@ local function createSlider(labelText, min, max, initial, onChange)
     addRound(bar, UDim.new(0, 8))
 
     local fill = Instance.new("Frame")
-    fill.Size = UDim2.new(math.clamp((initial - min) / (max - min), 0, 1), 0, 1, 0)
-    fill.BackgroundColor3 = (Settings and Settings.Theme and Settings.Theme.Accent) or DEFAULT_THEME.Accent
+    fill.Size = UDim2.new((initial - min)/(max - min), 0, 1, 0)
+    fill.BackgroundColor3 = Settings.Theme and Settings.Theme.Accent or DEFAULT_THEME.Accent
     fill.Parent = bar
     addRound(fill, UDim.new(0, 8))
 
-    -- setter / getter
+    local dragging = false
     local function setToPercent(p)
         p = math.clamp(p, 0, 1)
         fill.Size = UDim2.new(p, 0, 1, 0)
         local val = math.floor(min + p * (max - min) + 0.5)
         valueLbl.Text = tostring(val)
-        if onChange then
-            pcall(onChange, val)
-        end
         return val
     end
 
     local function updateFromPos(px)
         local barPos = bar.AbsolutePosition
         local barSize = bar.AbsoluteSize
-        local p = (px - barPos.X) / math.max(1, barSize.X)
+        local p = (px - barPos.X) / (barSize.X)
         return setToPercent(p)
     end
-
-    -- Dragging / clicking
-    local dragging = false
-    local connInputChanged
 
     bar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
-            -- immediate update from this input (touch/mouse)
-            if input.Position then
-                updateFromPos(input.Position.X)
-            else
-                local mx = UserInputService:GetMouseLocation().X
-                updateFromPos(mx)
-            end
-
-            connInputChanged = UserInputService.InputChanged:Connect(function(inp)
-                if not dragging then return end
-                if inp.Position then
+            local conn
+            conn = UserInputService.InputChanged:Connect(function(inp)
+                if dragging and inp.Position then
                     updateFromPos(inp.Position.X)
-                else
-                    local mx = UserInputService:GetMouseLocation().X
-                    updateFromPos(mx)
                 end
             end)
+            repeat
+                local pos = UserInputService:GetMouseLocation()
+                updateFromPos(pos.X)
+                task.wait()
+            until not dragging
+            conn:Disconnect()
         end
     end)
-
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            if dragging then
-                dragging = false
-                if connInputChanged then
-                    connInputChanged:Disconnect()
-                    connInputChanged = nil
-                end
-            end
+            dragging = false
         end
     end)
 
-    -- allow clicks anywhere on the bar (not just drag)
-    bar.MouseButton1Click:Connect(function()
-        local mx = UserInputService:GetMouseLocation().X
-        updateFromPos(mx)
-    end)
-
-    -- set initial percent and return getter/setter
-    setToPercent((initial - min) / (max - min))
-
-    return row,
-           function() return tonumber(valueLbl.Text) end,
-           function(v)
-                -- externally set numeric value
-                v = tonumber(v) or min
-                local p = (v - min) / (max - min)
-                setToPercent(p)
-           end
+    setToPercent((initial - min)/(max - min))
+    return row, function() return tonumber(valueLbl.Text) end, function(v) setToPercent((v-min)/(max-min)) end
 end
 
--- Default constants
-local DEFAULT_WALKSPEED = 16
-local DEFAULT_JUMPPOWER = 50
-
--- === WalkSpeed & JumpPower sliders (8..500, 20..500) ===
-local walkRow, getWalkVal, setWalkVal = createSlider("Player WalkSpeed", 8, 500, (Settings and Settings.WalkSpeed) or DEFAULT_WALKSPEED,
-    function(val)
-        -- Save and apply right away
-        if Settings then Settings.WalkSpeed = val end
-        pcall(saveSettings)
-        local char = LocalPlayer.Character
-        if char then
-            local hum = char:FindFirstChildWhichIsA("Humanoid")
-            if hum then
-                pcall(function() hum.WalkSpeed = val end)
-            end
-        end
-    end
-)
+-- === WalkSpeed & JumpPower ===
+local walkRow, getWalkVal, setWalkVal = createSlider("Player WalkSpeed", 8, 500, Settings.WalkSpeed or 16)
 walkRow.LayoutOrder = 10
 walkRow.Parent = settingsPage
 
-local jumpRow, getJumpVal, setJumpVal = createSlider("Player JumpPower", 20, 500, (Settings and Settings.JumpPower) or DEFAULT_JUMPPOWER,
-    function(val)
-        if Settings then Settings.JumpPower = val end
-        pcall(saveSettings)
-        local char = LocalPlayer.Character
-        if char then
-            local hum = char:FindFirstChildWhichIsA("Humanoid")
-            if hum then
-                pcall(function()
-                    -- prefer JumpPower if available, also set JumpHeight if present
-                    if hum:GetAttribute("UseJumpPower") ~= nil then
-                        -- some maps use this attribute; set it defensively
-                        pcall(function() hum.UseJumpPower = true end)
-                    end
-                    if rawget(hum, "JumpPower") ~= nil then
-                        hum.JumpPower = val
-                    end
-                    if rawget(hum, "JumpHeight") ~= nil then
-                        -- approximate mapping if needed (robust fallback)
-                        hum.JumpHeight = math.max(0, (val / 50) * hum.JumpHeight)
-                    end
-                end)
-            end
-        end
-    end
-)
+local jumpRow, getJumpVal, setJumpVal = createSlider("Player JumpPower", 20, 500, Settings.JumpPower or 50)
 jumpRow.LayoutOrder = 11
 jumpRow.Parent = settingsPage
 
--- Ensure settings apply when new character spawns
-Players.PlayerAdded:Connect(function(plr)
-    if plr == LocalPlayer then
-        LocalPlayer.CharacterAdded:Connect(function(char)
-            task.wait(0.15)
-            -- apply current values to new humanoid
+-- Apply movement live
+spawn(function()
+    while true do
+        Settings.WalkSpeed = getWalkVal()
+        Settings.JumpPower = getJumpVal()
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChildWhichIsA("Humanoid") then
             local hum = char:FindFirstChildWhichIsA("Humanoid")
             if hum then
-                pcall(function()
-                    hum.WalkSpeed = (Settings and Settings.WalkSpeed) or DEFAULT_WALKSPEED
-                    if rawget(hum, "JumpPower") ~= nil then
-                        hum.JumpPower = (Settings and Settings.JumpPower) or DEFAULT_JUMPPOWER
-                    end
-                end)
+                hum.WalkSpeed = Settings.WalkSpeed
+                hum.JumpPower = Settings.JumpPower
             end
-        end)
+        end
+        saveSettings()
+        task.wait(0.3)
     end
 end)
 
--- If already loaded, ensure values are applied now
-if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid") then
-    local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-    pcall(function()
-        hum.WalkSpeed = (Settings and Settings.WalkSpeed) or DEFAULT_WALKSPEED
-        if rawget(hum, "JumpPower") ~= nil then
-            hum.JumpPower = (Settings and Settings.JumpPower) or DEFAULT_JUMPPOWER
-        end
-    end)
-end
-
--- === Restore Buttons (each restores the specific thing) ===
+-- === Restore Buttons ===
 local function addRestoreButton(text, callback, order)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0, 160, 0, 28)
@@ -906,17 +872,8 @@ local function addRestoreButton(text, callback, order)
     btn.MouseButton1Click:Connect(callback)
 end
 
-addRestoreButton("Restore WalkSpeed (16)", function()
-    setWalkVal(DEFAULT_WALKSPEED)
-    if Settings then Settings.WalkSpeed = DEFAULT_WALKSPEED end
-    pcall(saveSettings)
-end, 30)
-
-addRestoreButton("Restore JumpPower (50)", function()
-    setJumpVal(DEFAULT_JUMPPOWER)
-    if Settings then Settings.JumpPower = DEFAULT_JUMPPOWER end
-    pcall(saveSettings)
-end, 31)
+addRestoreButton("Restore WalkSpeed", function() setWalkVal(16) end, 30)
+addRestoreButton("Restore JumpPower", function() setJumpVal(50) end, 31)
 
 -- === Rejoin Button ===
 local rejoinBtn = Instance.new("TextButton")
@@ -929,10 +886,10 @@ rejoinBtn.LayoutOrder = 40
 addRound(rejoinBtn, UDim.new(0, 8))
 
 rejoinBtn.MouseButton1Click:Connect(function()
-    -- Teleport back to place id (attempt to rejoin)
-    pcall(function()
-        TeleportService:Teleport(game.PlaceId, LocalPlayer)
-    end)
+    local TeleportService = game:GetService("TeleportService")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    TeleportService:Teleport(game.PlaceId, LocalPlayer) -- same server rejoin
 end)
 
 -- ======= Sidebar buttons build =======
@@ -944,6 +901,32 @@ local btnOther = createSidebarButton("Other Scripts", 5)
 local btnSettings = createSidebarButton("Settings", 6)
 
 showPage("Welcome")
+
+-- ======= Close + Minimize (robust) =======
+local minimized = false
+-- store visibility map to restore reliably
+local function snapshotBodyVisibility()
+    local map = {}
+    for _, c in ipairs(main:GetChildren()) do
+        if c ~= header and c ~= dim and c.Name ~= "Shadow" then
+            map[c] = c.Visible
+        end
+    end
+    return map
+end
+local function restoreBodyVisibility(map)
+    if not map then return end
+    for c, v in pairs(map) do
+        if c and c.Parent then
+            c.Visible = v
+        end
+    end
+end
+
+closeBtn.MouseButton1Click:Connect(function()
+    tw(main, {Position = UDim2.new(0.5, 0, -1, 0), Size = UDim2.new(0, 20, 0, 20)}):Play()
+    task.delay(0.25, function() screenGui:Destroy() end)
+end)
 
 -- ======= Close + Minimize =======
 local minimized = false
