@@ -1,4 +1,4 @@
--- ⚡ ULTRA-INSTANT RESPAWN v13 ⚡
+-- ⚡ Ultra Respawn (Frame-Safe, Single-Call)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -14,24 +14,33 @@ end
 
 local function hookCharacter(char)
 	local humanoid = char:WaitForChild("Humanoid", 1)
+	if not humanoid then return end
 
-	-- Primary: humanoid.Died
-	humanoid.Died:Connect(forceRespawn)
+	-- Only run once when dead
+	local respawned = false
+	local function safeRespawn()
+		if not respawned then
+			respawned = true
+			forceRespawn()
+		end
+	end
 
-	-- Backup: frame-perfect heartbeat
+	humanoid.Died:Connect(safeRespawn)
+
+	-- Backup check (frame-perfect)
 	local hbConn
 	hbConn = RunService.Heartbeat:Connect(function()
 		if humanoid.Health <= 0 then
 			hbConn:Disconnect()
-			forceRespawn()
+			safeRespawn()
 		end
 	end)
 
-	-- Fallback: if Humanoid removed
+	-- Fallback: Humanoid removed
 	char.ChildRemoved:Connect(function(c)
 		if c == humanoid then
 			if hbConn then hbConn:Disconnect() end
-			forceRespawn()
+			safeRespawn()
 		end
 	end)
 end
@@ -43,4 +52,4 @@ else
 	forceRespawn()
 end
 
-print("⚡ Respawn v13 loaded (instant, frame-safe) ⚡")
+print("✅ Ultra Respawn loaded (instant, safe, single-call)")
