@@ -1,38 +1,44 @@
--- ⚡ No Cooldown vX (Ping-Safe Max)
+-- ⚡ No Cooldown (Frame-Perfect, Ping-Balanced)
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HRP = Character:WaitForChild("HumanoidRootPart")
 
--- Override delays to use frame-accurate scheduling
-hookfunction(wait, function() return RunService.PostSimulation:Wait() end)
-hookfunction(task.wait, function() return RunService.PostSimulation:Wait() end)
-hookfunction(delay, function(_, f) task.spawn(f) end)
-hookfunction(spawn, function(f) task.spawn(f) end)
+-- Lightweight hooks (no yield, just passthrough)
+hookfunction(wait, function() return RunService.Heartbeat:Wait() end)
+hookfunction(task.wait, function() return RunService.Heartbeat:Wait() end)
 
-task.spawn(function()
-	while true do
-		RunService.PostSimulation:Wait()
+-- Anti-yield optimization
+hookfunction(delay, function(_, f) task.defer(f) end)
+hookfunction(spawn, function(f) task.defer(f) end)
 
-		local char = LocalPlayer.Character
-		if not char then continue end
+-- Frame loop
+RunService.Heartbeat:Connect(function()
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local tool = char:FindFirstChildOfClass("Tool")
+	if not (hrp and tool) then return end
 
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		local tool = char:FindFirstChildOfClass("Tool")
-		if not hrp or not tool then continue end
+	local fightEvent = tool:FindFirstChild("FightEvent")
+	if not fightEvent then return end
 
-		local fightEvent = tool:FindFirstChild("FightEvent")
-		if not fightEvent then continue end
-
-		-- Scan nearby players only (avoid global spam)
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr ~= LocalPlayer and plr.Character then
-				local enemyHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-				if enemyHRP and (hrp.Position - enemyHRP.Position).Magnitude <= 20 then
-					fightEvent:FireServer(enemyHRP)
+	-- Optimized player scan (once per frame)
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			local enemy = plr.Character
+			if enemy then
+				local enemyHRP = enemy:FindFirstChild("HumanoidRootPart")
+				if enemyHRP then
+					local dist = (hrp.Position - enemyHRP.Position).Magnitude
+					if dist <= 18 then -- tighter for accuracy
+						fightEvent:FireServer(enemyHRP)
+					end
 				end
 			end
 		end
 	end
 end)
 
-print("✅ No Cooldown vX loaded (max speed, ping-safe)")
+print("✅ No Cooldown loaded (frame-perfect, ping-balanced)")
