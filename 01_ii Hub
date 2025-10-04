@@ -1,3 +1,6 @@
+-- UltraHub (mobile-friendly + fixes)
+-- Updated: Mobile drag, robust minimize/restore, read-only updates page, slider max 300, theme presets save.
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -161,16 +164,6 @@ workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(updateScale)
 if workspace.CurrentCamera then
     workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
 end
-
--- dim background
-local dim = Instance.new("Frame")
-dim.Name = "Dim"
-dim.AnchorPoint = Vector2.new(0.5,0.5)
-dim.Size = UDim2.new(1,0,1,0)
-dim.Position = UDim2.new(0.5, 0.5, 0.5, 0)
-dim.BackgroundColor3 = Color3.fromRGB(0,0,0)
-dim.BackgroundTransparency = 0.6
-dim.Parent = screenGui
 
 -- main window
 local main = Instance.new("Frame")
@@ -730,8 +723,10 @@ for i,t in ipairs(otherScripts) do
     row.Parent = otherPage
 end
 
--- Settings page
+-- ⚙️ Settings Page (with Color Wheel Theme Control)
 local settingsPage = createPage("Settings")
+
+-- Header
 local sHeader = Instance.new("TextLabel")
 sHeader.Size = UDim2.new(1, -24, 0, 26)
 sHeader.BackgroundTransparency = 1
@@ -742,24 +737,19 @@ sHeader.TextXAlignment = Enum.TextXAlignment.Left
 sHeader.Text = "Appearance & Behavior"
 sHeader.Parent = settingsPage
 
--- Auto execute toggle
+-- Auto Execute Toggle
 local autoRow, getAutoState, setAutoState = createToggle("Auto Execute Hub on Rejoin", Settings.AutoExecute)
 autoRow.LayoutOrder = 2
 autoRow.Parent = settingsPage
-do
-    local function pollToggle()
+spawn(function()
+    while settingsPage.Parent do
         Settings.AutoExecute = getAutoState()
         saveSettings()
+        task.wait(0.6)
     end
-    spawn(function()
-        while settingsPage.Parent do
-            pollToggle()
-            wait(0.6)
-        end
-    end)
-end
+end)
 
--- WalkSpeed & JumpPower sliders (max 300)
+-- === Sliders (WalkSpeed & JumpPower) ===
 local function createSlider(labelText, min, max, initial)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 56)
@@ -842,6 +832,7 @@ local function createSlider(labelText, min, max, initial)
     return row, function() return tonumber(valueLbl.Text) end
 end
 
+-- WalkSpeed / JumpPower rows
 local walkRow, getWalkVal = createSlider("Player WalkSpeed", 8, 300, Settings.WalkSpeed or 16)
 walkRow.LayoutOrder = 10
 walkRow.Parent = settingsPage
@@ -850,7 +841,7 @@ local jumpRow, getJumpVal = createSlider("Player JumpPower", 20, 300, Settings.J
 jumpRow.LayoutOrder = 11
 jumpRow.Parent = settingsPage
 
--- Apply slider changes live
+-- Live apply movement
 spawn(function()
     while true do
         local ws = getWalkVal()
@@ -861,18 +852,15 @@ spawn(function()
         if char and char:FindFirstChildWhichIsA("Humanoid") then
             local hum = char:FindFirstChildWhichIsA("Humanoid")
             if hum then
-                pcall(function()
-                    hum.WalkSpeed = ws
-                    hum.JumpPower = jp
-                end)
+                hum.WalkSpeed, hum.JumpPower = ws, jp
             end
         end
         saveSettings()
-        task.wait(0.45)
+        task.wait(0.3)
     end
 end)
 
--- Theme presets (now save immediately)
+-- === Theme Section ===
 local themeHeader = Instance.new("TextLabel")
 themeHeader.Size = UDim2.new(1, -24, 0, 22)
 themeHeader.BackgroundTransparency = 1
@@ -883,70 +871,85 @@ themeHeader.TextXAlignment = Enum.TextXAlignment.Left
 themeHeader.Text = "Theme"
 themeHeader.Parent = settingsPage
 
-local presetsRow = Instance.new("Frame")
-presetsRow.Size = UDim2.new(1, 0, 0, 36)
-presetsRow.BackgroundTransparency = 1
-presetsRow.LayoutOrder = 20
-presetsRow.Parent = settingsPage
+-- Color Wheel Accent Picker
+local wheelFrame = Instance.new("Frame")
+wheelFrame.Size = UDim2.new(0, 150, 0, 150)
+wheelFrame.Position = UDim2.new(0, 10, 0, 160)
+wheelFrame.BackgroundTransparency = 1
+wheelFrame.Parent = settingsPage
 
-local function addPreset(name, accent, background, panel, text, muted)
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(0, 110, 1, 0)
-    b.BackgroundColor3 = panel
-    b.Text = name
-    b.Font = Enum.Font.Gotham
-    b.TextSize = 12
-    b.TextColor3 = text
-    b.Parent = presetsRow
-    addRound(b, UDim.new(0, 8))
-    b.MouseButton1Click:Connect(function()
-        Settings.Theme.Accent = accent or Settings.Theme.Accent
-        Settings.Theme.Background = background or Settings.Theme.Background
-        Settings.Theme.Panel = panel or Settings.Theme.Panel
-        Settings.Theme.Text = text or Settings.Theme.Text
-        Settings.Theme.Muted = muted or Settings.Theme.Muted
-        saveSettings()
-        main.BackgroundColor3 = Settings.Theme.Background
-        header.BackgroundColor3 = Settings.Theme.Panel
-        sidebar.BackgroundColor3 = Settings.Theme.Panel
-        content.BackgroundColor3 = Settings.Theme.Panel
-        title.TextColor3 = Settings.Theme.Text
-        pageTitle.TextColor3 = Settings.Theme.Text
-        subtitle.TextColor3 = Settings.Theme.Muted
-    end)
+local wheel = Instance.new("ImageButton")
+wheel.Size = UDim2.new(1,0,1,0)
+wheel.BackgroundTransparency = 1
+wheel.Image = "rbxassetid://6020299385" -- rainbow wheel
+wheel.Parent = wheelFrame
+
+local selector = Instance.new("Frame")
+selector.Size = UDim2.new(0,10,0,10)
+selector.AnchorPoint = Vector2.new(0.5,0.5)
+selector.BackgroundColor3 = Color3.new(1,1,1)
+selector.BorderSizePixel = 0
+selector.Parent = wheel
+Instance.new("UICorner", selector).CornerRadius = UDim.new(1,0)
+
+-- Convert cursor position → Color
+local function getColorFromPos(x,y)
+    local rel = Vector2.new(x - wheel.AbsolutePosition.X, y - wheel.AbsolutePosition.Y)
+    local radius = wheel.AbsoluteSize.X/2
+    local center = Vector2.new(radius, radius)
+    local dir = (rel - center).Unit
+    local angle = math.atan2(dir.Y, dir.X)
+    local hue = (math.deg(angle)+360)%360 / 360
+    return Color3.fromHSV(hue, 1, 1)
 end
 
-addPreset("Cobalt", Color3.fromRGB(38, 100, 255), Color3.fromRGB(10, 12, 20), Color3.fromRGB(26,26,32), Color3.fromRGB(235,235,240), Color3.fromRGB(160,160,170))
-addPreset("Purple", Color3.fromRGB(98,53,255), Color3.fromRGB(15,15,20), Color3.fromRGB(26,26,32), Color3.fromRGB(235,235,240), Color3.fromRGB(160,160,170))
-addPreset("Black", Color3.fromRGB(80,80,80), Color3.fromRGB(8,8,10), Color3.fromRGB(20,20,22), Color3.fromRGB(230,230,230), Color3.fromRGB(140,140,140))
+local function setAccent(color, x, y)
+    Settings.Theme.Accent = color
+    saveSettings()
+    applyTheme()
+    selector.Position = UDim2.fromOffset(x - wheel.AbsolutePosition.X, y - wheel.AbsolutePosition.Y)
+end
 
+wheel.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        local pos = input.Position
+        setAccent(getColorFromPos(pos.X,pos.Y), pos.X, pos.Y)
+    end
+end)
+
+-- Brightness slider (dark/light background)
+local brightnessRow, getBrightnessVal = createSlider("Background Brightness", 0, 100, Settings.Brightness or 20)
+brightnessRow.LayoutOrder = 25
+brightnessRow.Parent = settingsPage
+
+spawn(function()
+    while true do
+        local b = getBrightnessVal()
+        Settings.Brightness = b
+        local level = b/100
+        Settings.Theme.Background = Color3.new(level,level,level)
+        saveSettings()
+        applyTheme()
+        task.wait(0.3)
+    end
+end)
+
+-- Restore Defaults
 local restoreBtn = Instance.new("TextButton")
-restoreBtn.Size = UDim2.new(0, 140, 0, 36)
-restoreBtn.Position = UDim2.new(0, 0, 0, 0)
+restoreBtn.Size = UDim2.new(0, 160, 0, 36)
 restoreBtn.Text = "Restore Defaults"
 restoreBtn.Font = Enum.Font.Gotham
 restoreBtn.TextSize = 14
 restoreBtn.Parent = settingsPage
-restoreBtn.LayoutOrder = 30
+restoreBtn.LayoutOrder = 40
 addRound(restoreBtn, UDim.new(0, 8))
 restoreBtn.MouseButton1Click:Connect(function()
-    Settings.Theme = {
-        Accent = DEFAULT_THEME.Accent,
-        Background = DEFAULT_THEME.Background,
-        Panel = DEFAULT_THEME.Panel,
-        Text = DEFAULT_THEME.Text,
-        Muted = DEFAULT_THEME.Muted
-    }
+    Settings.Theme = DEFAULT_THEME
     Settings.WalkSpeed = 16
     Settings.JumpPower = 50
+    Settings.Brightness = 20
     saveSettings()
-    main.BackgroundColor3 = Settings.Theme.Background
-    header.BackgroundColor3 = Settings.Theme.Panel
-    sidebar.BackgroundColor3 = Settings.Theme.Panel
-    content.BackgroundColor3 = Settings.Theme.Panel
-    title.TextColor3 = Settings.Theme.Text
-    pageTitle.TextColor3 = Settings.Theme.Text
-    subtitle.TextColor3 = Settings.Theme.Muted
+    applyTheme()
 end)
 
 -- ======= Sidebar buttons build =======
@@ -1012,52 +1015,44 @@ minimizeBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ======= Header drag (mouse + touch) =======
-do
-    local dragging = false
-    local dragStart = nil
-    local startPos = nil
-    local activeInput = nil
+-- ======= DRAGGING (PC + Mobile) =======
+local UserInputService = game:GetService("UserInputService")
 
-    local function beginDrag(input)
+local dragging, dragInput, dragStart, startPos
+
+local function update(input)
+    local delta = input.Position - dragStart
+    main.Position = UDim2.new(
+        startPos.X.Scale, startPos.X.Offset + delta.X,
+        startPos.Y.Scale, startPos.Y.Offset + delta.Y
+    )
+end
+
+header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
-        activeInput = input
         dragStart = input.Position
         startPos = main.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
     end
+end)
 
-    local function endDrag()
-        dragging = false
-        dragStart = nil
-        startPos = nil
-        activeInput = nil
+header.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
     end
+end)
 
-    header.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            beginDrag(input)
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    endDrag()
-                end
-            end)
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if not dragging or not dragStart or not startPos or not input.Position then return end
-        if input == activeInput then
-            local delta = input.Position - dragStart
-            local newX = startPos.X.Offset + delta.X
-            local newY = startPos.Y.Offset + delta.Y
-            -- clamp within screen boundaries (helps mobile)
-            local vs = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920,1080)
-            newX = math.clamp(newX, - (main.Size.X.Offset - 50), vs.X - 50)
-            newY = math.clamp(newY, - (main.Size.Y.Offset - 50), vs.Y - 50)
-            main.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
-        end
-    end)
-end
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
 
 -- ======= Search filter for sidebar =======
 searchBox:GetPropertyChangedSignal("Text"):Connect(function()
