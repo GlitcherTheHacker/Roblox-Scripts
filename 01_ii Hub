@@ -1,3 +1,6 @@
+-- UltraHub (mobile-friendly + fixes)
+-- Updated: Mobile drag, robust minimize/restore, read-only updates page, slider max 300, theme presets save.
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -720,7 +723,7 @@ for i,t in ipairs(otherScripts) do
     row.Parent = otherPage
 end
 
--- ⚙️ Settings Page (Rebuilt with RGB Sliders + Restore + Rejoin)
+-- ⚙️ Settings Page (Simplified – Theme Removed)
 local settingsPage = createPage("Settings")
 
 -- Header
@@ -731,7 +734,7 @@ sHeader.Font = Enum.Font.GothamBold
 sHeader.TextSize = 16
 sHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 sHeader.TextXAlignment = Enum.TextXAlignment.Left
-sHeader.Text = "Appearance & Behavior"
+sHeader.Text = "Settings"
 sHeader.Parent = settingsPage
 
 -- === Auto Execute Toggle ===
@@ -856,52 +859,6 @@ spawn(function()
     end
 end)
 
--- === Theme (RGB Sliders) ===
-local themeHeader = Instance.new("TextLabel")
-themeHeader.Size = UDim2.new(1, -24, 0, 22)
-themeHeader.BackgroundTransparency = 1
-themeHeader.Font = Enum.Font.GothamBold
-themeHeader.TextSize = 14
-themeHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
-themeHeader.TextXAlignment = Enum.TextXAlignment.Left
-themeHeader.Text = "Theme (RGB)"
-themeHeader.Parent = settingsPage
-
-local rRow, getR, setR = createSlider("Red", 0, 255, Settings.Theme and math.floor((Settings.Theme.Accent.R*255)) or 98)
-local gRow, getG, setG = createSlider("Green", 0, 255, Settings.Theme and math.floor((Settings.Theme.Accent.G*255)) or 53)
-local bRow, getB, setB = createSlider("Blue", 0, 255, Settings.Theme and math.floor((Settings.Theme.Accent.B*255)) or 255)
-
-rRow.LayoutOrder = 20 rRow.Parent = settingsPage
-gRow.LayoutOrder = 21 gRow.Parent = settingsPage
-bRow.LayoutOrder = 22 bRow.Parent = settingsPage
-
-spawn(function()
-    while true do
-        local accent = Color3.fromRGB(getR(), getG(), getB())
-        Settings.Theme.Accent = accent
-        saveSettings()
-        applyTheme()
-        task.wait(0.3)
-    end
-end)
-
--- === Brightness Slider ===
-local brightnessRow, getBrightnessVal, setBrightnessVal = createSlider("Background Brightness", 0, 100, Settings.Brightness or 20)
-brightnessRow.LayoutOrder = 25
-brightnessRow.Parent = settingsPage
-
-spawn(function()
-    while true do
-        local b = getBrightnessVal()
-        Settings.Brightness = b
-        local level = b/100
-        Settings.Theme.Background = Color3.new(level, level, level)
-        saveSettings()
-        applyTheme()
-        task.wait(0.3)
-    end
-end)
-
 -- === Restore Buttons ===
 local function addRestoreButton(text, callback, order)
     local btn = Instance.new("TextButton")
@@ -917,12 +874,6 @@ end
 
 addRestoreButton("Restore WalkSpeed", function() setWalkVal(16) end, 30)
 addRestoreButton("Restore JumpPower", function() setJumpVal(50) end, 31)
-addRestoreButton("Restore Theme", function()
-    setR(DEFAULT_THEME.Accent.R*255)
-    setG(DEFAULT_THEME.Accent.G*255)
-    setB(DEFAULT_THEME.Accent.B*255)
-end, 32)
-addRestoreButton("Restore Brightness", function() setBrightnessVal(20) end, 33)
 
 -- === Rejoin Button ===
 local rejoinBtn = Instance.new("TextButton")
