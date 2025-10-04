@@ -1,6 +1,3 @@
--- UltraHub (mobile-friendly + fixes)
--- Updated: Mobile drag, robust minimize/restore, read-only updates page, slider max 300, theme presets save.
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -723,7 +720,7 @@ for i,t in ipairs(otherScripts) do
     row.Parent = otherPage
 end
 
--- ⚙️ Settings Page (with Color Wheel Theme Control)
+-- ⚙️ Settings Page (Rebuilt with RGB Sliders + Restore + Rejoin)
 local settingsPage = createPage("Settings")
 
 -- Header
@@ -737,7 +734,7 @@ sHeader.TextXAlignment = Enum.TextXAlignment.Left
 sHeader.Text = "Appearance & Behavior"
 sHeader.Parent = settingsPage
 
--- Auto Execute Toggle
+-- === Auto Execute Toggle ===
 local autoRow, getAutoState, setAutoState = createToggle("Auto Execute Hub on Rejoin", Settings.AutoExecute)
 autoRow.LayoutOrder = 2
 autoRow.Parent = settingsPage
@@ -749,7 +746,7 @@ spawn(function()
     end
 end)
 
--- === Sliders (WalkSpeed & JumpPower) ===
+-- === Slider Factory ===
 local function createSlider(labelText, min, max, initial)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 56)
@@ -829,30 +826,29 @@ local function createSlider(labelText, min, max, initial)
     end)
 
     setToPercent((initial - min)/(max - min))
-    return row, function() return tonumber(valueLbl.Text) end
+    return row, function() return tonumber(valueLbl.Text) end, function(v) setToPercent((v-min)/(max-min)) end
 end
 
--- WalkSpeed / JumpPower rows
-local walkRow, getWalkVal = createSlider("Player WalkSpeed", 8, 300, Settings.WalkSpeed or 16)
+-- === WalkSpeed & JumpPower ===
+local walkRow, getWalkVal, setWalkVal = createSlider("Player WalkSpeed", 8, 500, Settings.WalkSpeed or 16)
 walkRow.LayoutOrder = 10
 walkRow.Parent = settingsPage
 
-local jumpRow, getJumpVal = createSlider("Player JumpPower", 20, 300, Settings.JumpPower or 50)
+local jumpRow, getJumpVal, setJumpVal = createSlider("Player JumpPower", 20, 500, Settings.JumpPower or 50)
 jumpRow.LayoutOrder = 11
 jumpRow.Parent = settingsPage
 
--- Live apply movement
+-- Apply movement live
 spawn(function()
     while true do
-        local ws = getWalkVal()
-        local jp = getJumpVal()
-        Settings.WalkSpeed = ws
-        Settings.JumpPower = jp
+        Settings.WalkSpeed = getWalkVal()
+        Settings.JumpPower = getJumpVal()
         local char = LocalPlayer.Character
         if char and char:FindFirstChildWhichIsA("Humanoid") then
             local hum = char:FindFirstChildWhichIsA("Humanoid")
             if hum then
-                hum.WalkSpeed, hum.JumpPower = ws, jp
+                hum.WalkSpeed = Settings.WalkSpeed
+                hum.JumpPower = Settings.JumpPower
             end
         end
         saveSettings()
@@ -860,7 +856,7 @@ spawn(function()
     end
 end)
 
--- === Theme Section ===
+-- === Theme (RGB Sliders) ===
 local themeHeader = Instance.new("TextLabel")
 themeHeader.Size = UDim2.new(1, -24, 0, 22)
 themeHeader.BackgroundTransparency = 1
@@ -868,57 +864,29 @@ themeHeader.Font = Enum.Font.GothamBold
 themeHeader.TextSize = 14
 themeHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 themeHeader.TextXAlignment = Enum.TextXAlignment.Left
-themeHeader.Text = "Theme"
+themeHeader.Text = "Theme (RGB)"
 themeHeader.Parent = settingsPage
 
--- Color Wheel Accent Picker
-local wheelFrame = Instance.new("Frame")
-wheelFrame.Size = UDim2.new(0, 150, 0, 150)
-wheelFrame.Position = UDim2.new(0, 10, 0, 160)
-wheelFrame.BackgroundTransparency = 1
-wheelFrame.Parent = settingsPage
+local rRow, getR, setR = createSlider("Red", 0, 255, Settings.Theme and math.floor((Settings.Theme.Accent.R*255)) or 98)
+local gRow, getG, setG = createSlider("Green", 0, 255, Settings.Theme and math.floor((Settings.Theme.Accent.G*255)) or 53)
+local bRow, getB, setB = createSlider("Blue", 0, 255, Settings.Theme and math.floor((Settings.Theme.Accent.B*255)) or 255)
 
-local wheel = Instance.new("ImageButton")
-wheel.Size = UDim2.new(1,0,1,0)
-wheel.BackgroundTransparency = 1
-wheel.Image = "rbxassetid://6020299385" -- rainbow wheel
-wheel.Parent = wheelFrame
+rRow.LayoutOrder = 20 rRow.Parent = settingsPage
+gRow.LayoutOrder = 21 gRow.Parent = settingsPage
+bRow.LayoutOrder = 22 bRow.Parent = settingsPage
 
-local selector = Instance.new("Frame")
-selector.Size = UDim2.new(0,10,0,10)
-selector.AnchorPoint = Vector2.new(0.5,0.5)
-selector.BackgroundColor3 = Color3.new(1,1,1)
-selector.BorderSizePixel = 0
-selector.Parent = wheel
-Instance.new("UICorner", selector).CornerRadius = UDim.new(1,0)
-
--- Convert cursor position → Color
-local function getColorFromPos(x,y)
-    local rel = Vector2.new(x - wheel.AbsolutePosition.X, y - wheel.AbsolutePosition.Y)
-    local radius = wheel.AbsoluteSize.X/2
-    local center = Vector2.new(radius, radius)
-    local dir = (rel - center).Unit
-    local angle = math.atan2(dir.Y, dir.X)
-    local hue = (math.deg(angle)+360)%360 / 360
-    return Color3.fromHSV(hue, 1, 1)
-end
-
-local function setAccent(color, x, y)
-    Settings.Theme.Accent = color
-    saveSettings()
-    applyTheme()
-    selector.Position = UDim2.fromOffset(x - wheel.AbsolutePosition.X, y - wheel.AbsolutePosition.Y)
-end
-
-wheel.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        local pos = input.Position
-        setAccent(getColorFromPos(pos.X,pos.Y), pos.X, pos.Y)
+spawn(function()
+    while true do
+        local accent = Color3.fromRGB(getR(), getG(), getB())
+        Settings.Theme.Accent = accent
+        saveSettings()
+        applyTheme()
+        task.wait(0.3)
     end
 end)
 
--- Brightness slider (dark/light background)
-local brightnessRow, getBrightnessVal = createSlider("Background Brightness", 0, 100, Settings.Brightness or 20)
+-- === Brightness Slider ===
+local brightnessRow, getBrightnessVal, setBrightnessVal = createSlider("Background Brightness", 0, 100, Settings.Brightness or 20)
 brightnessRow.LayoutOrder = 25
 brightnessRow.Parent = settingsPage
 
@@ -927,29 +895,50 @@ spawn(function()
         local b = getBrightnessVal()
         Settings.Brightness = b
         local level = b/100
-        Settings.Theme.Background = Color3.new(level,level,level)
+        Settings.Theme.Background = Color3.new(level, level, level)
         saveSettings()
         applyTheme()
         task.wait(0.3)
     end
 end)
 
--- Restore Defaults
-local restoreBtn = Instance.new("TextButton")
-restoreBtn.Size = UDim2.new(0, 160, 0, 36)
-restoreBtn.Text = "Restore Defaults"
-restoreBtn.Font = Enum.Font.Gotham
-restoreBtn.TextSize = 14
-restoreBtn.Parent = settingsPage
-restoreBtn.LayoutOrder = 40
-addRound(restoreBtn, UDim.new(0, 8))
-restoreBtn.MouseButton1Click:Connect(function()
-    Settings.Theme = DEFAULT_THEME
-    Settings.WalkSpeed = 16
-    Settings.JumpPower = 50
-    Settings.Brightness = 20
-    saveSettings()
-    applyTheme()
+-- === Restore Buttons ===
+local function addRestoreButton(text, callback, order)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 160, 0, 28)
+    btn.Text = text
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 13
+    btn.Parent = settingsPage
+    btn.LayoutOrder = order
+    addRound(btn, UDim.new(0, 8))
+    btn.MouseButton1Click:Connect(callback)
+end
+
+addRestoreButton("Restore WalkSpeed", function() setWalkVal(16) end, 30)
+addRestoreButton("Restore JumpPower", function() setJumpVal(50) end, 31)
+addRestoreButton("Restore Theme", function()
+    setR(DEFAULT_THEME.Accent.R*255)
+    setG(DEFAULT_THEME.Accent.G*255)
+    setB(DEFAULT_THEME.Accent.B*255)
+end, 32)
+addRestoreButton("Restore Brightness", function() setBrightnessVal(20) end, 33)
+
+-- === Rejoin Button ===
+local rejoinBtn = Instance.new("TextButton")
+rejoinBtn.Size = UDim2.new(0, 160, 0, 36)
+rejoinBtn.Text = "🔄 Rejoin Server"
+rejoinBtn.Font = Enum.Font.GothamBold
+rejoinBtn.TextSize = 14
+rejoinBtn.Parent = settingsPage
+rejoinBtn.LayoutOrder = 40
+addRound(rejoinBtn, UDim.new(0, 8))
+
+rejoinBtn.MouseButton1Click:Connect(function()
+    local TeleportService = game:GetService("TeleportService")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    TeleportService:Teleport(game.PlaceId, LocalPlayer) -- same server rejoin
 end)
 
 -- ======= Sidebar buttons build =======
