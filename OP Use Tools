@@ -1,13 +1,15 @@
--- ⚡ USE TOOLS ULTRA SPAMMER v3 ⚡
+-- ⚡ USE TOOLS ULTRA SPAMMER v4 ⚡ (Fixed unequip on stop)
 local player = game.Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local Heartbeat = RunService.Heartbeat
 
-local gui = Instance.new("ScreenGui", game.CoreGui)
+-- GUI setup
+local gui = Instance.new("ScreenGui")
 gui.Name = "UltraUseTools"
 gui.ResetOnSpawn = false
+gui.Parent = game.CoreGui
 
-local toggle = Instance.new("TextButton", gui)
+local toggle = Instance.new("TextButton")
 toggle.Size = UDim2.new(0, 120, 0, 50)
 toggle.Position = UDim2.new(0.5, -60, 1, -100)
 toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -15,32 +17,62 @@ toggle.Font = Enum.Font.GothamBlack
 toggle.Text = "OFF"
 toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggle.TextSize = 22
+toggle.Parent = gui
 Instance.new("UICorner", toggle).CornerRadius = UDim.new(0.3, 0)
 
 local attackEnabled = false
+local attackConnection
 
+-- Clean unequip function
+local function unequipAll()
+	local char = player.Character
+	if not char then return end
+	for _, tool in ipairs(char:GetChildren()) do
+		if tool:IsA("Tool") then
+			tool.Parent = player.Backpack
+		end
+	end
+end
+
+-- Toggle behavior
 local function toggleAttack()
 	attackEnabled = not attackEnabled
 	toggle.Text = attackEnabled and "ON" or "OFF"
-	toggle.BackgroundColor3 = attackEnabled and Color3.fromRGB(255,255,255) or Color3.fromRGB(0,0,0)
-	toggle.TextColor3 = attackEnabled and Color3.fromRGB(0,0,0) or Color3.fromRGB(255,255,255)
+	toggle.BackgroundColor3 = attackEnabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
+	toggle.TextColor3 = attackEnabled and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+
+	if attackEnabled then
+		-- Start loop connection
+		attackConnection = Heartbeat:Connect(function()
+			local char = player.Character
+			if not char then return end
+
+			-- Equip backpack tools
+			for _, tool in ipairs(player.Backpack:GetChildren()) do
+				if tool:IsA("Tool") then
+					tool.Parent = char
+				end
+			end
+
+			-- Activate equipped tools
+			for _, tool in ipairs(char:GetChildren()) do
+				if tool:IsA("Tool") then
+					pcall(function() tool:Activate() end)
+				end
+			end
+		end)
+	else
+		-- Stop loop
+		if attackConnection then
+			attackConnection:Disconnect()
+			attackConnection = nil
+		end
+
+		-- Unequip all tools safely
+		unequipAll()
+	end
 end
+
 toggle.MouseButton1Click:Connect(toggleAttack)
 
-Heartbeat:Connect(function()
-	if not attackEnabled then return end
-	local char = player.Character
-	if not char then return end
-
-	-- equip backpack tools
-	for _, tool in ipairs(player.Backpack:GetChildren()) do
-		if tool:IsA("Tool") then tool.Parent = char end
-	end
-
-	-- activate all equipped tools
-	for _, tool in ipairs(char:GetChildren()) do
-		if tool:IsA("Tool") then pcall(function() tool:Activate() end) end
-	end
-end)
-
-print("⚡ Use Tools v3 loaded (global loop, instant spam) ⚡")
+print("⚡ Use Tools v4 loaded — fixed unequip and toggle stability ⚡")
