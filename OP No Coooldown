@@ -1,43 +1,32 @@
--- ⚡ No Cooldown (Ultra Aggressive)
+-- ⚡ No Cooldown vX (Ping-Safe Max)
 local RunService = game:GetService("RunService")
-
-hookfunction(wait, function()
-	return RunService.PostSimulation:Wait()
-end)
-
-hookfunction(task.wait, function()
-	return RunService.PostSimulation:Wait()
-end)
-
-hookfunction(delay, function(_, func)
-	task.spawn(func)
-end)
-
-hookfunction(spawn, function(func)
-	task.spawn(func)
-end)
-
--- 🔁 FightEvent Ultra Spammer
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
+-- Override delays to use frame-accurate scheduling
+hookfunction(wait, function() return RunService.PostSimulation:Wait() end)
+hookfunction(task.wait, function() return RunService.PostSimulation:Wait() end)
+hookfunction(delay, function(_, f) task.spawn(f) end)
+hookfunction(spawn, function(f) task.spawn(f) end)
+
 task.spawn(function()
 	while true do
-		task.wait() -- Runs as fast as Roblox allows with PostSimulation
+		RunService.PostSimulation:Wait()
 
-		local character = LocalPlayer.Character
-		if not character then continue end
+		local char = LocalPlayer.Character
+		if not char then continue end
 
-		local hrp = character:FindFirstChild("HumanoidRootPart")
-		local tool = character:FindFirstChildOfClass("Tool")
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		local tool = char:FindFirstChildOfClass("Tool")
 		if not hrp or not tool then continue end
 
 		local fightEvent = tool:FindFirstChild("FightEvent")
 		if not fightEvent then continue end
 
-		for _, player in ipairs(Players:GetPlayers()) do
-			if player ~= LocalPlayer and player.Character then
-				local enemyHRP = player.Character:FindFirstChild("HumanoidRootPart")
+		-- Scan nearby players only (avoid global spam)
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= LocalPlayer and plr.Character then
+				local enemyHRP = plr.Character:FindFirstChild("HumanoidRootPart")
 				if enemyHRP and (hrp.Position - enemyHRP.Position).Magnitude <= 20 then
 					fightEvent:FireServer(enemyHRP)
 				end
@@ -46,4 +35,4 @@ task.spawn(function()
 	end
 end)
 
-print("[✅ No Cooldown + Remote Spammer running.")
+print("✅ No Cooldown vX loaded (max speed, ping-safe)")
