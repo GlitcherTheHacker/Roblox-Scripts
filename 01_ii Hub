@@ -1,6 +1,3 @@
--- UltraHub (mobile-friendly + fixes)
--- Updated: Mobile drag, robust minimize/restore, read-only updates page, slider max 300, theme presets save.
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -34,11 +31,11 @@ end
 
 -- ======= Config / Defaults =======
 local DEFAULT_THEME = {
-    Accent = Color3.fromRGB(98, 53, 255), -- purple glow
-    Background = Color3.fromRGB(10, 10, 12), -- nearly black
-    Panel = Color3.fromRGB(15, 15, 18), -- dark panel
-    Text = Color3.fromRGB(240, 240, 245), -- off-white text
-    Muted = Color3.fromRGB(120, 120, 125), -- softer gray
+    Accent = Color3.fromRGB(98, 53, 255),
+    Background = Color3.fromRGB(15,15,20),
+    Panel = Color3.fromRGB(26,26,32),
+    Text = Color3.fromRGB(235,235,240),
+    Muted = Color3.fromRGB(160,160,170),
     Radius = UDim.new(0, 12),
     Shadows = true
 }
@@ -926,6 +923,33 @@ end
 closeBtn.MouseButton1Click:Connect(function()
     tw(main, {Position = UDim2.new(0.5, 0, -1, 0), Size = UDim2.new(0, 20, 0, 20)}):Play()
     task.delay(0.25, function() screenGui:Destroy() end)
+end)
+
+-- ======= Close + Minimize (robust) =======
+local minimized = false
+local bodyParts = {sidebar, content} -- parts to hide/show when minimizing
+
+closeBtn.MouseButton1Click:Connect(function()
+    tw(main, {Position = UDim2.new(0.5, 0, -1, 0), Size = UDim2.new(0, 20, 0, 20)}):Play()
+    task.delay(0.25, function() screenGui:Destroy() end)
+end)
+
+minimizeBtn.MouseButton1Click:Connect(function()
+    if minimized then
+        -- restore
+        for _, p in ipairs(bodyParts) do
+            p.Visible = true
+        end
+        tw(main, {Size = UDim2.new(0, 920, 0, 580)}):Play()
+        minimized = false
+    else
+        -- hide body (keep header visible)
+        for _, p in ipairs(bodyParts) do
+            p.Visible = false
+        end
+        tw(main, {Size = UDim2.new(0, 380, 0, 80)}):Play()
+        minimized = true
+    end
 end)
 
 -- ======= DRAGGING (PC + Mobile) =======
