@@ -1,192 +1,103 @@
--- GLOBAL NoCooldown — Shared-Tick Multi-Tool Spammer (Token Bucket limiter)
--- Keeps total network packets low while still firing all equipped tools fast
+-- ⚡ Ultra Remote Spammer v2.0 ⚡
 
+-- CONFIG
+local auraRange = 20
+local auraSize = Vector3.new(30, 30, 30)
+local attackRate = 0.003 -- ~333 loops/sec
+local maxThreads = 5 -- limit concurrent threads to avoid overload
+
+-- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
-local Workspace = game:GetService("Workspace")
 
--- ===== CONFIG =====
-local globalMaxPerSecond = 60        -- total remote calls allowed per second (across all tools)
-local activateOnFire = true          -- call tool:Activate() when firing
-local nukeCooldownNames = true       -- try to zero out common cooldown/debounce objects
-local maxTokensCap = globalMaxPerSecond
--- ==================
+-- STATE
+local running = true
+local auraParams = OverlapParams.new()
+auraParams.FilterType = Enum.RaycastFilterType.Include
 
--- Cooldown nuke: wipes BoolValue/NumberValue named like cooldown/cd/debounce/delay
-local function nukeCooldowns(obj)
-    if not obj or not obj.GetDescendants then return end
-    for _, v in ipairs(obj:GetDescendants()) do
-        if v:IsA("BoolValue") or v:IsA("NumberValue") then
-            local n = tostring(v.Name):lower()
-            if n:find("cool") or n:find("cd") or n:find("debounce") or n:find("delay") then
-                if v:IsA("BoolValue") then
-                    v.Value = false
-                    v.Changed:Connect(function()
-                        if v:IsA("BoolValue") then pcall(function() v.Value = false end) end
-                    end)
-                else
-                    v.Value = 0
-                    v.Changed:Connect(function()
-                        if v:IsA("NumberValue") then pcall(function() v.Value = 0 end) end
+-- HELPERS
+local function getChar(plr) return plr and plr.Character end
+local function getHRP(plr)
+    local char = getChar(plr)
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getValidTargets()
+    local myHRP = getHRP(LocalPlayer)
+    if not myHRP then return {}, {} end
+
+    local playersInRange, chars = {}, {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local hrp = getHRP(player)
+            if hrp and (hrp.Position - myHRP.Position).Magnitude <= auraRange then
+                table.insert(playersInRange, player)
+                local char = getChar(player)
+                if char then table.insert(chars, char) end
+            end
+        end
+    end
+    return playersInRange, chars
+end
+
+local function getTouchPart(tool)
+    local transmitter = tool and tool:FindFirstChildWhichIsA("TouchTransmitter", true)
+    return transmitter and transmitter.Parent
+end
+
+local function autoEquip(tool)
+    if not tool:IsDescendantOf(workspace) then
+        tool.Parent = getChar(LocalPlayer)
+    end
+    tool:Activate()
+end
+
+-- MAIN LOOP
+task.spawn(function()
+    while running do
+        local myChar = getChar(LocalPlayer)
+        if not myChar then task.wait(1) continue end
+
+        local targets, enemyChars = getValidTargets()
+        auraParams.FilterDescendantsInstances = enemyChars
+
+        for _, tool in ipairs(myChar:GetChildren()) do
+            if tool:IsA("Tool") then
+                local fightEvent = tool:FindFirstChild("FightEvent")
+                local touchPart = getTouchPart(tool)
+
+                if fightEvent then
+                    autoEquip(tool)
+                    fightEvent:FireServer()
+                end
+
+                if touchPart then
+                    task.spawn(function()
+                        local partsInBox = workspace:GetPartBoundsInBox(
+                            touchPart.CFrame,
+                            touchPart.Size + auraSize,
+                            auraParams
+                        )
+                        for _, part in ipairs(partsInBox) do
+                            local model = part:FindFirstAncestorWhichIsA("Model")
+                            if model and table.find(enemyChars, model) then
+                                firetouchinterest(touchPart, part, 1)
+                                firetouchinterest(touchPart, part, 0)
+                            end
+                        end
                     end)
                 end
             end
         end
+        task.wait(attackRate)
     end
-end
-
-if nukeCooldownNames then
-    pcall(function() nukeCooldowns(LocalPlayer) end)
-    LocalPlayer.DescendantAdded:Connect(function(d)
-        pcall(function() nukeCooldowns(d) end)
-    end)
-end
-
--- Helper: find the first RemoteEvent/RemoteFunction under a tool (deep search)
-local function findToolRemote(tool)
-    if not tool or not tool.GetDescendants then return nil end
-    for _, d in ipairs(tool:GetDescendants()) do
-        if d:IsA("RemoteEvent") or d:IsA("RemoteFunction") then
-            return d
-        end
-    end
-    -- fallback: named FightEvent
-    local fe = tool:FindFirstChild("FightEvent", true)
-    if fe and (fe:IsA("RemoteEvent") or fe:IsA("RemoteFunction")) then return fe end
-    return nil
-end
-
--- Collect all candidate tools currently parented to the character
-local function getEquippedTools()
-    local char = LocalPlayer.Character
-    if not char then return {} end
-    local tools = {}
-    for _, c in ipairs(char:GetChildren()) do
-        if c:IsA("Tool") then table.insert(tools, c) end
-    end
-    return tools
-end
-
--- TOKEN BUCKET (global limiter)
-local tokens = maxTokensCap
-local lastTime = tick()
-
-local function refillTokens()
-    local now = tick()
-    local delta = now - lastTime
-    lastTime = now
-    tokens = math.min(tokens + delta * globalMaxPerSecond, maxTokensCap)
-end
-
--- Fire a remote (safe pcall)
-local function fireRemote(remote)
-    if not remote then return end
-    pcall(function()
-        if remote:IsA("RemoteEvent") then
-            remote:FireServer()
-        elseif remote:IsA("RemoteFunction") then
-            -- safe invoke without arguments
-            local ok, _ = pcall(function() return remote:InvokeServer() end)
-            -- ignore returned value
-        end
-    end)
-end
-
--- One-step attempt to spend a token and trigger a tool (returns true if fired)
-local function tryFireTool(tool)
-    if tokens < 1 then return false end
-
-    local remote = findToolRemote(tool)
-    if not remote and not activateOnFire then
-        return false
-    end
-
-    -- consume token
-    tokens = tokens - 1
-
-    -- Activate locally (fast, no network)
-    if activateOnFire then
-        pcall(function()
-            if tool.Parent ~= LocalPlayer.Character then tool.Parent = LocalPlayer.Character end
-            if tool and tool.Activate then
-                pcall(function() tool:Activate() end)
-            end
-        end)
-    end
-
-    -- Fire remote if found
-    if remote then
-        task.spawn(function() fireRemote(remote) end) -- spawn so remote work doesn't block loop
-    end
-
-    return true
-end
-
--- Shared tick loop: attempts to fire across all equipped tools while tokens exist
-local firing = false
-local toolIndex = 1
-
-local function startSharedLoop()
-    if firing then return end
-    firing = true
-
-    task.spawn(function()
-        while firing do
-            refillTokens()
-
-            local tools = getEquippedTools()
-            local tcount = #tools
-            if tcount == 0 then
-                -- no tools, sleep a little
-                RunService.Heartbeat:Wait()
-            else
-                -- iterate, attempting to fire tools as tokens allow
-                -- continue from last toolIndex to spread calls fairly
-                local attempts = 0
-                while tokens >= 1 and attempts < tcount do
-                    toolIndex = ((toolIndex - 1) % tcount) + 1
-                    local tool = tools[toolIndex]
-                    tryFireTool(tool)
-                    toolIndex = toolIndex + 1
-                    attempts = attempts + 1
-                end
-                -- if we used all tokens or tried each tool once, wait for next heartbeat
-                RunService.Heartbeat:Wait()
-            end
-        end
-    end)
-end
-
--- Stop the loop (call if necessary)
-local function stopSharedLoop()
-    firing = false
-end
-
--- Auto-start on character spawn
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.25)
-    -- patch existing tools under character/backpack
-    startSharedLoop()
 end)
 
--- Kickstart if character already present
-if LocalPlayer.Character then
-    startSharedLoop()
-end
+-- RESET ON DEATH
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    running = true
+end)
 
--- Optional: expose runtime controls
-local API = {}
-API.SetGlobalMaxPerSecond = function(n)
-    if type(n) == "number" and n > 0 then
-        globalMaxPerSecond = n
-        maxTokensCap = math.max(1, globalMaxPerSecond)
-        tokens = math.min(tokens, maxTokensCap)
-    end
-end
-API.Pause = stopSharedLoop
-API.Resume = startSharedLoop
-
-print(("✅ Global NoCooldown (shared-tick) started — global cap: %d calls/sec"):format(globalMaxPerSecond))
--- You can call API.SetGlobalMaxPerSecond(30) or API.Pause() / API.Resume() from console
-return API
+print("⚡ Ultra Remote Spammer Activated! ⚡")
