@@ -1,80 +1,116 @@
-_G.HeadSize = 10
-_G.HitboxSize = Vector3.new(10, 10, 10)
-_G.Disabled = false
-_G.ToggleKey = Enum.KeyCode.H
-
+-- ⚡ Damage Hitbox v2 (Freeze-Safe + GUI Toggle)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
 
-local hitboxes = {}
+-- SETTINGS
+_G.HeadSize = 10
+_G.HitboxSize = Vector3.new(10, 10, 10)
+_G.ToggleKey = Enum.KeyCode.H
+_G.Enabled = false
 
--- Toggle with key
-game:GetService("UserInputService").InputBegan:Connect(function(input, isProcessed)
-    if not isProcessed and input.KeyCode == _G.ToggleKey then
-        _G.Disabled = not _G.Disabled
-    end
+-- === GUI BUTTON ===
+local gui = Instance.new("ScreenGui")
+gui.Name = "HitboxToggleUI"
+gui.ResetOnSpawn = false
+gui.Parent = game.CoreGui
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 140, 0, 50)
+toggleBtn.Position = UDim2.new(0, 20, 1, -80)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+toggleBtn.TextColor3 = Color3.new(1, 1, 1)
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.TextSize = 18
+toggleBtn.Text = "Hitbox: OFF"
+toggleBtn.Parent = gui
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
+
+local function updateButton()
+	toggleBtn.Text = "Hitbox: " .. (_G.Enabled and "ON" or "OFF")
+	toggleBtn.BackgroundColor3 = _G.Enabled and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(40, 40, 40)
+end
+
+local function toggleHitbox()
+	_G.Enabled = not _G.Enabled
+	updateButton()
+end
+toggleBtn.MouseButton1Click:Connect(toggleHitbox)
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+	if not gpe and input.KeyCode == _G.ToggleKey then
+		toggleHitbox()
+	end
 end)
 
--- Update hitboxes each frame without freezing movement
+updateButton()
+
+-- === MAIN LOOP ===
 RunService.RenderStepped:Connect(function()
-    if _G.Disabled then return end
-    local localPlayer = Players.LocalPlayer
+	if not _G.Enabled then return end
 
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= localPlayer and player.Character and player.Character:FindFirstChild("Head") then
-            pcall(function()
-                local head = player.Character.Head
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and plr.Character then
+			local head = plr.Character:FindFirstChild("Head")
+			if not head then continue end
 
-                -- Avoid constantly resizing the real head (fix freeze issue)
-                if not hitboxes[player] then
-                    local hitbox = Instance.new("Part")
-                    hitbox.Name = "Hitbox"
-                    hitbox.Size = _G.HitboxSize
-                    hitbox.Transparency = 1
-                    hitbox.CanCollide = false
-                    hitbox.Massless = true
-                    hitbox.Anchored = false
-                    hitbox.Parent = player.Character
+			-- Create or update hitbox (but don't weld + set CFrame both!)
+			local hitbox = plr.Character:FindFirstChild("Hitbox")
+			if not hitbox then
+				hitbox = Instance.new("Part")
+				hitbox.Name = "Hitbox"
+				hitbox.Size = _G.HitboxSize
+				hitbox.Transparency = 1
+				hitbox.CanCollide = false
+				hitbox.Massless = true
+				hitbox.Anchored = false
+				hitbox.Parent = plr.Character
 
-                    local weld = Instance.new("WeldConstraint")
-                    weld.Part0 = head
-                    weld.Part1 = hitbox
-                    weld.Parent = hitbox
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = head
+				weld.Part1 = hitbox
+				weld.Parent = hitbox
 
-                    hitboxes[player] = hitbox
-                end
+				local selection = Instance.new("SelectionBox")
+				selection.Adornee = hitbox
+				selection.LineThickness = 0.05
+				selection.Color3 = Color3.fromRGB(255, 255, 255)
+				selection.SurfaceTransparency = 0.5
+				selection.Parent = hitbox
 
-                local hitbox = hitboxes[player]
-                hitbox.Size = _G.HitboxSize
-                hitbox.CFrame = head.CFrame
+				local gui = Instance.new("BillboardGui")
+				gui.Name = "HealthGui"
+				gui.Adornee = hitbox
+				gui.Size = UDim2.new(0, 100, 0, 25)
+				gui.StudsOffset = Vector3.new(0, 3, 0)
+				gui.Parent = hitbox
 
-                -- Optional: Health display
-                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                if humanoid then
-                    if not hitbox:FindFirstChild("HealthGui") then
-                        local billboardGui = Instance.new("BillboardGui")
-                        billboardGui.Name = "HealthGui"
-                        billboardGui.Adornee = hitbox
-                        billboardGui.Size = UDim2.new(0, 100, 0, 25)
-                        billboardGui.StudsOffset = Vector3.new(0, 3, 0)
-                        billboardGui.Parent = hitbox
+				local text = Instance.new("TextLabel")
+				text.Name = "HealthLabel"
+				text.Size = UDim2.new(1, 0, 1, 0)
+				text.BackgroundTransparency = 1
+				text.TextColor3 = Color3.new(1, 1, 1)
+				text.TextStrokeTransparency = 0.5
+				text.TextScaled = true
+				text.Font = Enum.Font.GothamBold
+				text.Text = "Health: ???"
+				text.Parent = gui
+			end
 
-                        local textLabel = Instance.new("TextLabel")
-                        textLabel.Name = "HealthLabel"
-                        textLabel.Size = UDim2.new(1, 0, 1, 0)
-                        textLabel.BackgroundTransparency = 1
-                        textLabel.TextColor3 = Color3.new(1, 1, 1)
-                        textLabel.TextStrokeTransparency = 0.5
-                        textLabel.TextScaled = true
-                        textLabel.Font = Enum.Font.Gotham
-                        textLabel.TextSize = 10
-                        textLabel.Parent = billboardGui
-                    end
+			-- Only resize / update, don't re-anchor
+			head.Size = Vector3.new(_G.HeadSize, _G.HeadSize, _G.HeadSize)
+			head.Massless = true
+			head.CanCollide = false
+			head.Transparency = 1
 
-                    local healthLabel = hitbox.HealthGui.HealthLabel
-                    healthLabel.Text = string.format("Health: %.0f", humanoid.Health)
-                end
-            end)
-        end
-    end
+			local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+			if hum then
+				local lbl = hitbox:FindFirstChild("HealthGui") and hitbox.HealthGui:FindFirstChild("HealthLabel")
+				if lbl then lbl.Text = string.format("Health: %.0f", hum.Health) end
+			end
+		end
+	end
 end)
+
+print("✅ Hitbox Damage v2 loaded (freeze-safe, toggleable)")
