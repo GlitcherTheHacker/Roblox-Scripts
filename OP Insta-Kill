@@ -1,103 +1,120 @@
--- ⚡ Ultra Remote Spammer v2.0 ⚡
-
--- CONFIG
-local auraRange = 20
-local auraSize = Vector3.new(30, 30, 30)
-local attackRate = 0.003 -- ~333 loops/sec
-local maxThreads = 5 -- limit concurrent threads to avoid overload
-
--- SERVICES
+-- ⚡ Insta-Kill Aura Ultra (Ping-Safe & Optimized)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
--- STATE
-local running = true
+-- CONFIG
+local AURA_RANGE = 20
+local AURA_BOX = Vector3.new(30, 30, 30)
+local ACTIVE = true
+
+-- PREP
 local auraParams = OverlapParams.new()
 auraParams.FilterType = Enum.RaycastFilterType.Include
 
--- HELPERS
-local function getChar(plr) return plr and plr.Character end
+local function getChar(plr)
+    return plr and plr.Character or nil
+end
+
 local function getHRP(plr)
     local char = getChar(plr)
     return char and char:FindFirstChild("HumanoidRootPart")
 end
 
-local function getValidTargets()
-    local myHRP = getHRP(LocalPlayer)
-    if not myHRP then return {}, {} end
+local function getTargets()
+    local char = getChar(LocalPlayer)
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return {} end
 
-    local playersInRange, chars = {}, {}
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local hrp = getHRP(player)
-            if hrp and (hrp.Position - myHRP.Position).Magnitude <= auraRange then
-                table.insert(playersInRange, player)
-                local char = getChar(player)
-                if char then table.insert(chars, char) end
+    local t = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local hrp2 = getHRP(plr)
+            if hrp2 and (hrp2.Position - hrp.Position).Magnitude <= AURA_RANGE then
+                table.insert(t, plr)
             end
         end
     end
-    return playersInRange, chars
+    return t
 end
 
-local function getTouchPart(tool)
-    local transmitter = tool and tool:FindFirstChildWhichIsA("TouchTransmitter", true)
-    return transmitter and transmitter.Parent
-end
-
-local function autoEquip(tool)
-    if not tool:IsDescendantOf(workspace) then
-        tool.Parent = getChar(LocalPlayer)
+local function equipTools(char)
+    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            tool.Parent = char
+        end
     end
-    tool:Activate()
+end
+
+local function fastActivate(tool)
+    task.spawn(function()
+        tool:Activate()
+    end)
 end
 
 -- MAIN LOOP
 task.spawn(function()
-    while running do
-        local myChar = getChar(LocalPlayer)
-        if not myChar then task.wait(1) continue end
+    while ACTIVE do
+        local char = getChar(LocalPlayer)
+        if not char then
+            RunService.PostSimulation:Wait()
+            continue
+        end
+        equipTools(char)
 
-        local targets, enemyChars = getValidTargets()
-        auraParams.FilterDescendantsInstances = enemyChars
+        local hrp = getHRP(LocalPlayer)
+        if not hrp then
+            RunService.PostSimulation:Wait()
+            continue
+        end
 
-        for _, tool in ipairs(myChar:GetChildren()) do
+        local targets = getTargets()
+        local enemyModels = {}
+        for _, p in ipairs(targets) do
+            if p.Character then table.insert(enemyModels, p.Character) end
+        end
+        auraParams.FilterDescendantsInstances = enemyModels
+
+        for _, tool in ipairs(char:GetChildren()) do
             if tool:IsA("Tool") then
                 local fightEvent = tool:FindFirstChild("FightEvent")
-                local touchPart = getTouchPart(tool)
+                local touchPart = tool:FindFirstChildWhichIsA("BasePart", true)
 
                 if fightEvent then
-                    autoEquip(tool)
-                    fightEvent:FireServer()
+                    for _, plr in ipairs(targets) do
+                        pcall(function()
+                            fightEvent:FireServer(getHRP(plr))
+                        end)
+                    end
+                    fastActivate(tool)
                 end
 
                 if touchPart then
-                    task.spawn(function()
-                        local partsInBox = workspace:GetPartBoundsInBox(
-                            touchPart.CFrame,
-                            touchPart.Size + auraSize,
-                            auraParams
-                        )
-                        for _, part in ipairs(partsInBox) do
-                            local model = part:FindFirstAncestorWhichIsA("Model")
-                            if model and table.find(enemyChars, model) then
-                                firetouchinterest(touchPart, part, 1)
-                                firetouchinterest(touchPart, part, 0)
-                            end
+                    local hits = workspace:GetPartBoundsInBox(
+                        touchPart.CFrame,
+                        touchPart.Size + AURA_BOX,
+                        auraParams
+                    )
+                    for _, part in ipairs(hits) do
+                        local mdl = part:FindFirstAncestorWhichIsA("Model")
+                        if mdl and table.find(enemyModels, mdl) then
+                            firetouchinterest(touchPart, part, 1)
+                            firetouchinterest(touchPart, part, 0)
                         end
-                    end)
+                    end
                 end
             end
         end
-        task.wait(attackRate)
+
+        -- frame-accurate, safe delay
+        RunService.PostSimulation:Wait()
     end
 end)
 
--- RESET ON DEATH
+-- Reset on death
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
-    running = true
+    ACTIVE = true
 end)
 
-print("⚡ Ultra Remote Spammer Activated! ⚡")
+print("✅ Insta-Kill Aura Ultra loaded (max speed, ping-safe)")
