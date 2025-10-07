@@ -16,6 +16,7 @@ local allowedIDs = {
     9616513682, -- My Alt
 --  ==[ Friends ]==
     8695113281, -- Eggy Alt
+    2271342427, -- Kaiden
 }
 local function isVerified(userId)
     for _, id in ipairs(allowedIDs) do
@@ -623,16 +624,16 @@ updatesLabel.Size = UDim2.new(1, -10, 0, 0)
 updatesLabel.Position = UDim2.new(0, 5, 0, 0)
 updatesLabel.BackgroundTransparency = 1
 updatesLabel.Text = [[
-📝 Updates: 09/11/25
-- Fixed No-Cooldown breaking on respawn
-- Added an "Info" page to explain features
-- Nav bar/page buttons made scrollable and robust
-- Rewrote minimize/restore to be stable
-- Optimized mobile drag & UI scaling
-- OP No Cooldown updated, Insta-Kill updated, Kill Aura added
-- Get Tools, Respawn, Use Tools improved for speed and reliability
-
-More notes will be added here. This text is hard-coded and read-only.
+📝 Updates: 10/4/25
+- Fixed the hub minimization breaking
+- Change the theme slightly
+- Fixed draggability
+- Sliders should now update properly
+- No cooldown, slight enhancement
+- Insta-Kill major enhancement
+- Damage modifications
+- Use Tools Fix
+- Loopbring Button draggable
 ]]
 updatesLabel.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 updatesLabel.TextWrapped = true
