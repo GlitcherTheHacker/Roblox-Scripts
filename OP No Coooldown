@@ -1,20 +1,59 @@
--- ⚡ No Cooldown (Frame-Perfect, Ping-Balanced)
+-- ⚡ Ultra No Cooldown (Adaptive, Ping-Balanced, Optimized)
+-- Author: Optimized for maximum DPS without network overflow.
+
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
+local Stats = game:GetService("Stats")
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HRP = Character:WaitForChild("HumanoidRootPart")
 
--- Lightweight hooks (no yield, just passthrough)
+-- 🧠 Optimization Hooks
 hookfunction(wait, function() return RunService.Heartbeat:Wait() end)
 hookfunction(task.wait, function() return RunService.Heartbeat:Wait() end)
-
--- Anti-yield optimization
 hookfunction(delay, function(_, f) task.defer(f) end)
 hookfunction(spawn, function(f) task.defer(f) end)
 
--- Frame loop
+-- 📈 Dynamic Balancing Variables
+local maxRange = 20
+local maxBatch = 2         -- hits per tick (safe limit)
+local minTick = 0.005      -- minimum delay between sends
+local nextSend = 0
+local cachedPlayers = {}
+local pingBase = 0.02      -- fallback ping in seconds
+
+-- ⚡ Cache players (updates only when necessary)
+local function rebuildCache()
+	table.clear(cachedPlayers)
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			local char = plr.Character
+			if char then
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					cachedPlayers[#cachedPlayers + 1] = hrp
+				end
+			end
+		end
+	end
+end
+
+Players.PlayerAdded:Connect(rebuildCache)
+Players.PlayerRemoving:Connect(rebuildCache)
 RunService.Heartbeat:Connect(function()
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr.Character and not table.find(cachedPlayers, plr.Character:FindFirstChild("HumanoidRootPart")) then
+			rebuildCache()
+			break
+		end
+	end
+end)
+
+-- 🕒 Frame loop (adaptive rate control)
+RunService.Heartbeat:Connect(function(dt)
+	local now = tick()
+	if now < nextSend then return end
+
 	local char = LocalPlayer.Character
 	if not char then return end
 	local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -24,21 +63,25 @@ RunService.Heartbeat:Connect(function()
 	local fightEvent = tool:FindFirstChild("FightEvent")
 	if not fightEvent then return end
 
-	-- Optimized player scan (once per frame)
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr ~= LocalPlayer then
-			local enemy = plr.Character
-			if enemy then
-				local enemyHRP = enemy:FindFirstChild("HumanoidRootPart")
-				if enemyHRP then
-					local dist = (hrp.Position - enemyHRP.Position).Magnitude
-					if dist <= 18 then -- tighter for accuracy
-						fightEvent:FireServer(enemyHRP)
-					end
-				end
+	-- estimate ping and adjust timing
+	local network = Stats.Network
+	local pingStat = network.ServerStatsItem["Data Ping"]
+	local currentPing = pingStat and (pingStat:GetValue() / 1000) or pingBase
+	local adjustedTick = math.clamp(currentPing * 1.25, minTick, 0.05)
+	nextSend = now + adjustedTick
+
+	-- 🔁 Attack batching
+	local hitCount = 0
+	for _, enemyHRP in ipairs(cachedPlayers) do
+		local dist = (hrp.Position - enemyHRP.Position).Magnitude
+		if dist <= maxRange then
+			fightEvent:FireServer(enemyHRP)
+			hitCount += 1
+			if hitCount >= maxBatch then
+				break -- don't overload the network
 			end
 		end
 	end
 end)
 
-print("✅ No Cooldown loaded (frame-perfect, ping-balanced)")
+print("✅ Ultra No Cooldown script loaded (ping-adaptive, overflow-protected)")
