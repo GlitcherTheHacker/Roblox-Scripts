@@ -1,120 +1,81 @@
--- ⚡ Insta-Kill Aura Ultra (Ping-Safe & Optimized)
+-- Adaptive Burst Aura (network-aware, private-server friendly)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
 local LocalPlayer = Players.LocalPlayer
 
 -- CONFIG
-local AURA_RANGE = 20
-local AURA_BOX = Vector3.new(30, 30, 30)
-local ACTIVE = true
+local auraRange = 20
+local attackRate = 0.05         -- how often we check for targets (seconds)
+local desiredTotalHits = 500    -- logical hits per detection
+local maxBatchPerWave = 25      -- how many events to send in one micro-wave
+local minWaveInterval = 0.01    -- minimum gap between waves (s)
+local maxWaveInterval = 0.1     -- maximum gap between waves (s)
+local jitter = 0.003            -- random jitter to avoid exact periodicity
 
--- PREP
-local auraParams = OverlapParams.new()
-auraParams.FilterType = Enum.RaycastFilterType.Include
-
-local function getChar(plr)
-    return plr and plr.Character or nil
-end
-
-local function getHRP(plr)
-    local char = getChar(plr)
-    return char and char:FindFirstChild("HumanoidRootPart")
-end
-
-local function getTargets()
-    local char = getChar(LocalPlayer)
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return {} end
-
-    local t = {}
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            local hrp2 = getHRP(plr)
-            if hrp2 and (hrp2.Position - hrp.Position).Magnitude <= AURA_RANGE then
-                table.insert(t, plr)
-            end
+-- helper to read ping (falls back to a small default)
+local function getPingSeconds()
+    local network = Stats.Network
+    local pingStat = network and network.ServerStatsItem and network.ServerStatsItem["Data Ping"]
+    if pingStat then
+        local ms = pingStat:GetValue()
+        if ms and ms > 0 then
+            return ms / 1000
         end
     end
-    return t
+    return 0.03
 end
 
-local function equipTools(char)
-    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
-        if tool:IsA("Tool") then
-            tool.Parent = char
-        end
-    end
-end
+local function sendBurst(fightEvent, target, totalHits)
+    -- Adaptive parameters
+    local ping = getPingSeconds()
+    -- scale waves by ping: higher ping -> fewer hits per wave and longer intervals
+    local scale = math.clamp(ping / 0.03, 0.5, 5) -- 1 at ~30ms
+    local batch = math.max(1, math.floor(maxBatchPerWave / scale))
+    local interval = math.clamp(minWaveInterval * scale, minWaveInterval, maxWaveInterval)
 
-local function fastActivate(tool)
+    -- spawn a thread to send the waves without blocking main loop
     task.spawn(function()
-        tool:Activate()
+        local sent = 0
+        while sent < totalHits do
+            local toSend = math.min(batch, totalHits - sent)
+            for i = 1, toSend do
+                -- Fire the remote with the single target (server must validate)
+                pcall(function()
+                    fightEvent:FireServer(target)
+                end)
+            end
+            sent = sent + toSend
+
+            -- small wait with jitter
+            local waitTime = interval + (math.random() - 0.5) * jitter
+            task.wait(waitTime)
+        end
     end)
 end
 
--- MAIN LOOP
+-- Example usage: detect targets and call sendBurst
 task.spawn(function()
-    while ACTIVE do
-        local char = getChar(LocalPlayer)
-        if not char then
-            RunService.PostSimulation:Wait()
-            continue
-        end
-        equipTools(char)
-
-        local hrp = getHRP(LocalPlayer)
-        if not hrp then
-            RunService.PostSimulation:Wait()
-            continue
-        end
-
-        local targets = getTargets()
-        local enemyModels = {}
-        for _, p in ipairs(targets) do
-            if p.Character then table.insert(enemyModels, p.Character) end
-        end
-        auraParams.FilterDescendantsInstances = enemyModels
-
-        for _, tool in ipairs(char:GetChildren()) do
-            if tool:IsA("Tool") then
-                local fightEvent = tool:FindFirstChild("FightEvent")
-                local touchPart = tool:FindFirstChildWhichIsA("BasePart", true)
-
-                if fightEvent then
-                    for _, plr in ipairs(targets) do
-                        pcall(function()
-                            fightEvent:FireServer(getHRP(plr))
-                        end)
-                    end
-                    fastActivate(tool)
-                end
-
-                if touchPart then
-                    local hits = workspace:GetPartBoundsInBox(
-                        touchPart.CFrame,
-                        touchPart.Size + AURA_BOX,
-                        auraParams
-                    )
-                    for _, part in ipairs(hits) do
-                        local mdl = part:FindFirstAncestorWhichIsA("Model")
-                        if mdl and table.find(enemyModels, mdl) then
-                            firetouchinterest(touchPart, part, 1)
-                            firetouchinterest(touchPart, part, 0)
+    while true do
+        local myChar = LocalPlayer.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if myHRP then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LocalPlayer then
+                    local char = plr.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    if hrp and (hrp.Position - myHRP.Position).Magnitude <= auraRange then
+                        -- find tool / event on local player
+                        local tool = myChar:FindFirstChildOfClass("Tool")
+                        local fightEvent = tool and tool:FindFirstChild("FightEvent")
+                        if fightEvent then
+                            -- send an adaptive 500-hit burst
+                            sendBurst(fightEvent, hrp, desiredTotalHits)
                         end
                     end
                 end
             end
         end
-
-        -- frame-accurate, safe delay
-        RunService.PostSimulation:Wait()
+        task.wait(attackRate)
     end
 end)
-
--- Reset on death
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1)
-    ACTIVE = true
-end)
-
-print("✅ Insta-Kill Aura Ultra loaded (max speed, ping-safe)")
