@@ -18,6 +18,7 @@ local allowedIDs = {
 --  ==[ Friends ]==
     8695113281, -- Eggy Alt
     3816480506, -- Messi Acc
+    2946227328, -- Alex Acc
 }
 local function isVerified(userId)
     for _, id in ipairs(allowedIDs) do
