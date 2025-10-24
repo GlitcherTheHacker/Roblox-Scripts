@@ -1,4 +1,4 @@
--- NO COOLDOWN
+-- ⚡ MAX-PERFORMANCE NO COOLDOWN (No-Animation + Frame-Priority)
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
@@ -7,14 +7,36 @@ local Stats = game:GetService("Stats")
 local LocalPlayer = Players.LocalPlayer
 local networkPing = 0.02
 local cachedEnemies = {}
+local maxRange = 20
+local minTick = 0.0015  -- 🔥 absolute minimum
+local burstCount = 3    -- small burst per frame for harder hits
 
--- 🔁 hook optimizations
-hookfunction(wait, function() return RunService.RenderStepped:Wait() end)
-hookfunction(task.wait, function() return RunService.RenderStepped:Wait() end)
+-- 🧩 Disable animations completely
+task.spawn(function()
+	while true do
+		task.wait(0.5)
+		local char = LocalPlayer.Character
+		if char then
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			if hum then
+				for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+					track:Stop(0)
+				end
+				hum.AnimationPlayed:Connect(function(track)
+					task.defer(function() track:Stop(0) end)
+				end)
+			end
+		end
+	end
+end)
+
+-- 🔁 function hooks
+hookfunction(wait, function() return RunService.Stepped:Wait() end)
+hookfunction(task.wait, function() return RunService.Stepped:Wait() end)
 hookfunction(delay, function(_, f) task.defer(f) end)
 hookfunction(spawn, function(f) task.defer(f) end)
 
--- 🧠 maintain optimized cache of enemies
+-- 🧠 Enemy cache
 local function rebuildCache()
 	table.clear(cachedEnemies)
 	for _, plr in ipairs(Players:GetPlayers()) do
@@ -38,13 +60,9 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
--- ⚡ MAIN ATTACK LOOP
-local maxRange = 20
-local minTick = 0.002  -- 🔥 ultra low delay floor
-local last = 0
+-- ⚡ MAIN LOOP
 local nextSend = 0
-
-RunService.RenderStepped:Connect(function(dt)
+RunService.Stepped:Connect(function(_, dt)
 	local now = os.clock()
 	if now < nextSend then return end
 
@@ -57,18 +75,19 @@ RunService.RenderStepped:Connect(function(dt)
 	local fightEvent = tool:FindFirstChild("FightEvent")
 	if not fightEvent then return end
 
-	-- ⚙️ ping tuning
 	local pingStat = Stats.Network.ServerStatsItem["Data Ping"]
 	local ping = pingStat and pingStat:GetValue() / 1000 or networkPing
-	local interval = math.clamp(ping * 0.75, minTick, 0.03) -- push just below safe ping window
+	local interval = math.clamp(ping * 0.6, minTick, 0.025)
 	nextSend = now + interval
 
-	-- 🔁 fire to all enemies in range
+	-- 🌀 Burst mode: rapid micro-fire for each target in range
 	for _, enemy in ipairs(cachedEnemies) do
 		if (hrp.Position - enemy.Position).Magnitude <= maxRange then
-			fightEvent:FireServer(enemy)
+			for i = 1, burstCount do
+				fightEvent:FireServer(enemy)
+			end
 		end
 	end
 end)
 
-print("✅ MAX-POWER NO COOLDOWN loaded (RenderStepped + adaptive fire loop)")
+print("✅NO COOLDOWN loaded (silent, frame-priority)")
