@@ -1,57 +1,51 @@
--- ⚡ Ultra No Cooldown (Adaptive, Ping-Balanced, Optimized)
--- Author: Optimized for maximum DPS without network overflow.
+-- ⚡ MAX-POWER NO COOLDOWN (Ping-Tuned, Frame-Edge, Overflow-Protected)
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local Stats = game:GetService("Stats")
-local LocalPlayer = Players.LocalPlayer
-local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local HRP = Character:WaitForChild("HumanoidRootPart")
 
--- 🧠 Optimization Hooks
-hookfunction(wait, function() return RunService.Heartbeat:Wait() end)
-hookfunction(task.wait, function() return RunService.Heartbeat:Wait() end)
+local LocalPlayer = Players.LocalPlayer
+local networkPing = 0.02
+local cachedEnemies = {}
+
+-- 🔁 hook optimizations
+hookfunction(wait, function() return RunService.RenderStepped:Wait() end)
+hookfunction(task.wait, function() return RunService.RenderStepped:Wait() end)
 hookfunction(delay, function(_, f) task.defer(f) end)
 hookfunction(spawn, function(f) task.defer(f) end)
 
--- 📈 Dynamic Balancing Variables
-local maxRange = 20
-local maxBatch = 2         -- hits per tick (safe limit)
-local minTick = 0.005      -- minimum delay between sends
-local nextSend = 0
-local cachedPlayers = {}
-local pingBase = 0.02      -- fallback ping in seconds
-
--- ⚡ Cache players (updates only when necessary)
+-- 🧠 maintain optimized cache of enemies
 local function rebuildCache()
-	table.clear(cachedPlayers)
+	table.clear(cachedEnemies)
 	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr ~= LocalPlayer then
-			local char = plr.Character
-			if char then
-				local hrp = char:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					cachedPlayers[#cachedPlayers + 1] = hrp
-				end
+		if plr ~= LocalPlayer and plr.Character then
+			local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				cachedEnemies[#cachedEnemies + 1] = hrp
 			end
 		end
 	end
 end
-
 Players.PlayerAdded:Connect(rebuildCache)
 Players.PlayerRemoving:Connect(rebuildCache)
 RunService.Heartbeat:Connect(function()
 	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr.Character and not table.find(cachedPlayers, plr.Character:FindFirstChild("HumanoidRootPart")) then
+		local c = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+		if plr ~= LocalPlayer and c and not table.find(cachedEnemies, c) then
 			rebuildCache()
 			break
 		end
 	end
 end)
 
--- 🕒 Frame loop (adaptive rate control)
-RunService.Heartbeat:Connect(function(dt)
-	local now = tick()
+-- ⚡ MAIN ATTACK LOOP
+local maxRange = 20
+local minTick = 0.002  -- 🔥 ultra low delay floor
+local last = 0
+local nextSend = 0
+
+RunService.RenderStepped:Connect(function(dt)
+	local now = os.clock()
 	if now < nextSend then return end
 
 	local char = LocalPlayer.Character
@@ -63,25 +57,18 @@ RunService.Heartbeat:Connect(function(dt)
 	local fightEvent = tool:FindFirstChild("FightEvent")
 	if not fightEvent then return end
 
-	-- estimate ping and adjust timing
-	local network = Stats.Network
-	local pingStat = network.ServerStatsItem["Data Ping"]
-	local currentPing = pingStat and (pingStat:GetValue() / 1000) or pingBase
-	local adjustedTick = math.clamp(currentPing * 1.25, minTick, 0.05)
-	nextSend = now + adjustedTick
+	-- ⚙️ ping tuning
+	local pingStat = Stats.Network.ServerStatsItem["Data Ping"]
+	local ping = pingStat and pingStat:GetValue() / 1000 or networkPing
+	local interval = math.clamp(ping * 0.75, minTick, 0.03) -- push just below safe ping window
+	nextSend = now + interval
 
-	-- 🔁 Attack batching
-	local hitCount = 0
-	for _, enemyHRP in ipairs(cachedPlayers) do
-		local dist = (hrp.Position - enemyHRP.Position).Magnitude
-		if dist <= maxRange then
-			fightEvent:FireServer(enemyHRP)
-			hitCount += 1
-			if hitCount >= maxBatch then
-				break -- don't overload the network
-			end
+	-- 🔁 fire to all enemies in range
+	for _, enemy in ipairs(cachedEnemies) do
+		if (hrp.Position - enemy.Position).Magnitude <= maxRange then
+			fightEvent:FireServer(enemy)
 		end
 	end
 end)
 
-print("✅ Ultra No Cooldown script loaded (ping-adaptive, overflow-protected)")
+print("✅ MAX-POWER NO COOLDOWN loaded (RenderStepped + adaptive fire loop)")
