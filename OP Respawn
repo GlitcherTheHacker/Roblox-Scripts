@@ -1,4 +1,4 @@
--- ⚡ ULTRA-INSTANT RESPAWN (Frame-Edge, Single-Call, Perfect Sync)
+-- RESPAWN (Perfect Sync)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
