@@ -1,4 +1,4 @@
--- ⚡ MAX-POWER NO COOLDOWN (Ping-Tuned, Frame-Edge, Overflow-Protected)
+-- NO COOLDOWN
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
