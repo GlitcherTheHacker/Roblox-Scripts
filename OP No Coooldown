@@ -11,25 +11,6 @@ local maxRange = 20
 local minTick = 0.0015  -- 🔥 absolute minimum
 local burstCount = 3    -- small burst per frame for harder hits
 
--- 🧩 Disable animations completely
-task.spawn(function()
-	while true do
-		task.wait(0.5)
-		local char = LocalPlayer.Character
-		if char then
-			local hum = char:FindFirstChildOfClass("Humanoid")
-			if hum then
-				for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-					track:Stop(0)
-				end
-				hum.AnimationPlayed:Connect(function(track)
-					task.defer(function() track:Stop(0) end)
-				end)
-			end
-		end
-	end
-end)
-
 -- 🔁 function hooks
 hookfunction(wait, function() return RunService.Stepped:Wait() end)
 hookfunction(task.wait, function() return RunService.Stepped:Wait() end)
