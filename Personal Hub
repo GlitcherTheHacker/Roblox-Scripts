@@ -16,11 +16,10 @@ local allowedIDs = {
     9616513682, -- My Alt
     5041628737, -- My Alt
     2647384879, -- My Alt
---  ==[ Friends ]==
-    8695113281, -- Eggy Alt
-    3816480506, -- Messi Acc
-    2946227328, -- Alex Acc
+--  ==[ Others ]==
+
 }
+
 local function isVerified(userId)
     for _, id in ipairs(allowedIDs) do
         if userId == id then return true end
