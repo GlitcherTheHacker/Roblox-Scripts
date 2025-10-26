@@ -1,159 +1,183 @@
--- Kill Aura
+--// ⚔️ Dual Kill Aura System (Personal + Target Lock Aura)
+--// Created by you, optimized and modular
 
--- Configuración global y de conexiones
+--== CONFIG ==--
 local auraRange = 30
-local auraSize = Vector3.new(30, 30, 30) -- Tamaño mejorado para mayor precisión
-local connections = getgenv().configs and getgenv().configs.connection
+local auraSize = Vector3.new(30, 30, 30)
+local buttonSize = UDim2.new(0, 80, 0, 30) -- smaller button like screenshot
 
--- Desactivación y limpieza de conexiones previas
-if connections then
-    local Disable = getgenv().configs.Disable
-    for _, v in ipairs(connections) do
-        v:Disconnect()
-    end
-    Disable:Fire()
-    Disable:Destroy()
-    table.clear(getgenv().configs)
-end
-
--- Creación de eventos y configuración
-local Disable = Instance.new("BindableEvent")
-getgenv().configs = { connections = {}, Disable = Disable, Size = auraSize, DeathCheck = false }
-
--- Servicios y variables necesarias
+--== SERVICES ==--
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local lp = Players.LocalPlayer
-local Run = true
-local Ignorelist = OverlapParams.new()
-Ignorelist.FilterType = Enum.RaycastFilterType.Include
+local LocalPlayer = Players.LocalPlayer
 
--- Funciones auxiliares
-local function getchar(plr)
-    return (plr or lp).Character
-end
+--== STATE ==--
+local SelectedPlayers = {}
+local AuraParts = {}
+local running = true
+local screenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+screenGui.Name = "DualAuraGUI"
 
-local function GetTouchInterest(Tool)
-    return Tool and Tool:FindFirstChildWhichIsA("TouchTransmitter", true)
-end
+--== UI SETUP ==--
+local auraButton = Instance.new("TextButton")
+auraButton.Size = buttonSize
+auraButton.Position = UDim2.new(0.45, 0, 0.05, 0)
+auraButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+auraButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+auraButton.Text = "AURA"
+auraButton.Parent = screenGui
 
-local function GetCharacters()
-    local Characters = {}
-    for _, v in ipairs(Players:GetPlayers()) do
-        if v ~= lp then
-            local character = getchar(v)
-            if character and character:FindFirstChild("Humanoid") and character.Humanoid.Health > 0 then
-                table.insert(Characters, character)
-            end
-        end
-    end
-    return Characters
-end
+local dropdown = Instance.new("ScrollingFrame")
+dropdown.Size = UDim2.new(0, 160, 0, 220)
+dropdown.Position = UDim2.new(0.45, 0, 0.05, 35)
+dropdown.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+dropdown.Visible = false
+dropdown.CanvasSize = UDim2.new(0, 0, 0, 0)
+dropdown.ScrollBarThickness = 6
+dropdown.Parent = screenGui
 
-local function AutoActivateTool(Tool)
-    if Tool:IsDescendantOf(workspace) then
-        Tool:Activate()
-    end
-end
+local uiList = Instance.new("UIListLayout", dropdown)
+uiList.Padding = UDim.new(0, 3)
+uiList.SortOrder = Enum.SortOrder.LayoutOrder
 
-local function Attack(Tool, TouchPart, TargetPart)
-    if Tool:IsDescendantOf(workspace) then
-        -- Evitar movimiento del tool al aplicar el daño
-        firetouchinterest(TouchPart, TargetPart, 1)
-        firetouchinterest(TouchPart, TargetPart, 0)
-    end
-end
-
--- Conexión para desactivar
-table.insert(getgenv().configs.connections, Disable.Event:Connect(function()
-    Run = false
-end))
-
--- Función para aplicar daño instantáneo sin mover los tools
-local function ApplyDamageInstant(Tool, TouchPart, Characters)
-    -- Se obtiene la lista de instancias en el área del aura
-    local InstancesInBox = workspace:GetPartBoundsInBox(TouchPart.CFrame, TouchPart.Size + getgenv().configs.Size, Ignorelist)
-
-    -- Iteramos por las instancias dentro del área
-    for _, v in ipairs(InstancesInBox) do
-        local Character = v:FindFirstAncestorWhichIsA("Model")
-        -- Si la instancia es un personaje y está en el rango, se aplica el daño
-        if Character and table.find(Characters, Character) then
-            -- Aplicar el daño solo sin mover la herramienta
-            Attack(Tool, TouchPart, v)
-        end
-    end
-end
-
--- Función para activar el aura de inmediato cuando se equipa un tool
-local function CheckAndActivateAura()
-    local char = getchar()
-    if char then
-        local Tools = char:GetChildren()
-        for _, tool in ipairs(Tools) do
-            if tool:IsA("Tool") and GetTouchInterest(tool) then
-                local TouchPart = GetTouchInterest(tool).Parent
-                AutoActivateTool(tool)
-                ApplyDamageInstant(tool, TouchPart, GetCharacters())
-            end
-        end
-    end
-end
-
--- Llamamos a esta función inmediatamente para asegurar que se active al reaparecer
-CheckAndActivateAura()
-
--- Aura principal optimizada (primera lógica)
-RunService.Heartbeat:Connect(function()
-    local char = getchar()
-    local Characters = GetCharacters()
-    Ignorelist.FilterDescendantsInstances = Characters
-
-    local Tools = char and char:GetChildren() or lp.Backpack:GetChildren()
-    for _, tool in ipairs(Tools) do
-        if tool:IsA("Tool") and GetTouchInterest(tool) then
-            local TouchPart = GetTouchInterest(tool).Parent
-            AutoActivateTool(tool)
-            ApplyDamageInstant(tool, TouchPart, Characters)
-        end
-    end
+auraButton.MouseButton1Click:Connect(function()
+    dropdown.Visible = not dropdown.Visible
 end)
 
--- Segunda aura (manejo de herramientas especiales)
-local range = 30
-RunService.RenderStepped:Connect(function()
-    local char = getchar()
-    for _, k in ipairs(Players:GetPlayers()) do
-        local v = k.Character
-        if k ~= lp and v and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 and v:FindFirstChild("HumanoidRootPart") and lp:DistanceFromCharacter(v.HumanoidRootPart.Position) <= range then
-            local tool = char and char:FindFirstChildOfClass("Tool")
-            if tool then
-                AutoActivateTool(tool)
-                if tool:FindFirstChild("Handle") then
-                    for _, part in ipairs(v:GetChildren()) do
-                        if part:IsA("BasePart") then
-                            -- Evitar movimiento de los tools al aplicar firetouch
-                            firetouchinterest(tool.Handle, part, 0)
-                            firetouchinterest(tool.Handle, part, 1)
-                        end
+--== FUNCTIONS ==--
+local function updatePlayerList()
+    for _, btn in ipairs(dropdown:GetChildren()) do
+        if btn:IsA("TextButton") then btn:Destroy() end
+    end
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local nameLength = #plr.Name
+            local dynamicTextSize = math.clamp(20 - (nameLength / 2), 12, 20)
+
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -10, 0, 25)
+            btn.Text = plr.Name
+            btn.TextScaled = false
+            btn.TextSize = dynamicTextSize
+            btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btn.Parent = dropdown
+
+            btn.MouseButton1Click:Connect(function()
+                if SelectedPlayers[plr] then
+                    SelectedPlayers[plr] = nil
+                    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+                    if AuraParts[plr] then
+                        AuraParts[plr]:Destroy()
+                        AuraParts[plr] = nil
                     end
                 else
-                    for _, specialTool in ipairs(tool:GetChildren()) do
-                        if specialTool.Name == "RocketArm1" or specialTool.Name == "RocketArm2" or specialTool.Name == "SuperFist" or specialTool.Name == "SuprrFist1" then
-                            local touch = specialTool:FindFirstChild("Middle")
-                            if touch then
-                                for _, part in ipairs(v:GetChildren()) do
-                                    if part:IsA("BasePart") or part:IsA("Part") then
-                                        -- Evitar movimiento de los tools al aplicar firetouch
-                                        firetouchinterest(touch, part, 0)
-                                        firetouchinterest(touch, part, 1)
-                                    end
-                                end
-                            end
-                        end
-                    end
+                    SelectedPlayers[plr] = true
+                    btn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+
+                    local part = Instance.new("Part")
+                    part.Anchored = true
+                    part.CanCollide = false
+                    part.Transparency = 1
+                    part.Size = Vector3.new(12, 12, 12)
+                    part.Name = "TargetAura_" .. plr.Name
+                    part.Parent = workspace
+                    AuraParts[plr] = part
+                end
+            end)
+        end
+    end
+end
+
+Players.PlayerAdded:Connect(updatePlayerList)
+Players.PlayerRemoving:Connect(updatePlayerList)
+updatePlayerList()
+
+--== AURA CORE ==--
+local function getChar(plr)
+    return plr and plr.Character
+end
+
+local function getHRP(plr)
+    local char = getChar(plr)
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getTouchPart(tool)
+    local tx = tool and tool:FindFirstChildWhichIsA("TouchTransmitter", true)
+    return tx and tx.Parent
+end
+
+local function getEnemies()
+    local chars = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            local c = getChar(p)
+            if c and c:FindFirstChildOfClass("Humanoid") then
+                table.insert(chars, c)
+            end
+        end
+    end
+    return chars
+end
+
+local function attack(tool, touchPart, target)
+    if tool and touchPart and target then
+        firetouchinterest(touchPart, target, 1)
+        firetouchinterest(touchPart, target, 0)
+    end
+end
+
+--== MAIN LOOP ==--
+RunService.Heartbeat:Connect(function()
+    local myChar = getChar(LocalPlayer)
+    local myHRP = getHRP(LocalPlayer)
+    if not myChar or not myHRP then return end
+
+    local tools = {}
+    for _, t in ipairs(myChar:GetChildren()) do
+        if t:IsA("Tool") then table.insert(tools, t) end
+    end
+
+    -- 🌀 Update Target Aura positions
+    for plr, aura in pairs(AuraParts) do
+        local hrp = getHRP(plr)
+        if hrp then
+            aura.CFrame = hrp.CFrame
+        end
+    end
+
+    -- ⚔️ Attack selected targets
+    for _, tool in ipairs(tools) do
+        local touch = getTouchPart(tool)
+        if touch then
+            tool:Activate()
+            for _, aura in pairs(AuraParts) do
+                attack(tool, touch, aura)
+            end
+        end
+    end
+
+    -- 🌪️ Personal aura around you
+    local enemies = getEnemies()
+    local params = OverlapParams.new()
+    params.FilterDescendantsInstances = enemies
+    params.FilterType = Enum.RaycastFilterType.Include
+
+    for _, tool in ipairs(tools) do
+        local touch = getTouchPart(tool)
+        if touch then
+            tool:Activate()
+            local partsInBox = workspace:GetPartBoundsInBox(myHRP.CFrame, auraSize, params)
+            for _, part in ipairs(partsInBox) do
+                local model = part:FindFirstAncestorWhichIsA("Model")
+                if model and table.find(enemies, model) then
+                    attack(tool, touch, part)
                 end
             end
         end
     end
 end)
+
+print("✅ Dual Kill Aura System Loaded: Personal + Target Lock Active")
