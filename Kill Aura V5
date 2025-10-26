@@ -1,0 +1,521 @@
+-- ======= Services =======
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ======= CONFIG =======
+local UIAnchor = UDim2.new(1, -10, 0, 10) -- top-right anchor (change if you want)
+local EntryHeight = 28
+local EntryPadding = 4
+local DropdownWidth = 180
+local SelfAuraSize = Vector3.new(8, 4, 8) -- size of local aura part (for touch)
+local AttackInterval = 0.06 -- how often the script attempts to "attack" (seconds)
+local AuraTargetSize = Vector3.new(2, 2, 2) -- invisible part that follows targets
+local UseFireTouchIfAvailable = true -- if a tool has a Handle or TouchTransmitter we use firetouchinterest
+-- ========================
+
+-- Internal state
+local Selected = {}       --> [player] = true/false
+local AuraParts = {}      --> [player] = Part (follows player)
+local UIEntries = {}      --> [player] = UI Button
+local Enabled = false
+local LastRefresh = 0
+
+-- Utility helpers
+local function isAliveCharacter(char)
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if hrp and humanoid and humanoid.Health > 0 then
+        return true
+    end
+    return false
+end
+
+local function getHRP(player)
+    local char = player and player.Character
+    if char then
+        return char:FindFirstChild("HumanoidRootPart")
+    end
+    return nil
+end
+
+local function createInvisiblePart(size)
+    local p = Instance.new("Part")
+    p.Size = size or Vector3.new(1,1,1)
+    p.Transparency = 1
+    p.Anchored = true
+    p.CanCollide = false
+    p.CanQuery = true
+    p.CanTouch = false
+    p.CastShadow = false
+    p.Name = "AuraTarget"
+    p.Parent = workspace
+    return p
+end
+
+-- Create GUI
+local screen = Instance.new("ScreenGui")
+screen.Name = "ExecutorAuraGui"
+screen.ResetOnSpawn = false
+screen.Parent = PlayerGui
+
+-- Main container (for anchor, we'll position top-right)
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, DropdownWidth, 0, 32)
+mainFrame.Position = UIAnchor
+mainFrame.AnchorPoint = Vector2.new(1, 0)
+mainFrame.BackgroundTransparency = 1
+mainFrame.Parent = screen
+
+local auraBtn = Instance.new("TextButton")
+auraBtn.Name = "AuraButton"
+auraBtn.Text = "AURA"
+auraBtn.Font = Enum.Font.SourceSansBold
+auraBtn.TextSize = 18
+auraBtn.TextColor3 = Color3.fromRGB(255,255,255)
+auraBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+auraBtn.BorderSizePixel = 0
+auraBtn.Size = UDim2.new(1, 0, 0, 32)
+auraBtn.Parent = mainFrame
+
+local dropdown = Instance.new("Frame")
+dropdown.Name = "Dropdown"
+dropdown.Size = UDim2.new(1, 0, 0, 200)
+dropdown.Position = UDim2.new(0, 0, 0, 36)
+dropdown.BackgroundColor3 = Color3.fromRGB(25,25,25)
+dropdown.BorderSizePixel = 0
+dropdown.Visible = false
+dropdown.Parent = mainFrame
+
+local uiListLayout = Instance.new("UIListLayout")
+uiListLayout.Padding = UDim.new(0, EntryPadding)
+uiListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+uiListLayout.Parent = dropdown
+
+local uiPadding = Instance.new("UIPadding")
+uiPadding.PaddingTop = UDim.new(0, 6)
+uiPadding.PaddingBottom = UDim.new(0, 6)
+uiPadding.PaddingLeft = UDim.new(0, 6)
+uiPadding.PaddingRight = UDim.new(0, 6)
+uiPadding.Parent = dropdown
+
+-- Header (optional)
+local header = Instance.new("TextLabel")
+header.Text = "Players"
+header.Font = Enum.Font.SourceSansBold
+header.TextSize = 14
+header.TextColor3 = Color3.fromRGB(220,220,220)
+header.BackgroundTransparency = 1
+header.Size = UDim2.new(1, -12, 0, 20)
+header.Parent = dropdown
+
+-- scroll frame to contain entries
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1, -12, 1, -36)
+scroll.Position = UDim2.new(0, 6, 0, 28)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.ScrollBarThickness = 6
+scroll.BackgroundTransparency = 1
+scroll.BorderSizePixel = 0
+scroll.Parent = dropdown
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, EntryPadding)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Parent = scroll
+
+-- Toggle dropdown open/close
+auraBtn.MouseButton1Click:Connect(function()
+    dropdown.Visible = not dropdown.Visible
+    if dropdown.Visible then
+        -- expand container to fit content, limit to 10 entries visible
+        local count = #Players:GetPlayers()
+        local visibleCount = math.clamp(count, 1, 10)
+        local h = 28 + visibleCount * (EntryHeight + EntryPadding) + 12
+        dropdown.Size = UDim2.new(1, 0, 0, h)
+        screen.Enabled = true
+    end
+end)
+
+-- Resize scroll canvas when entries change
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    local s = listLayout.AbsoluteContentSize
+    scroll.CanvasSize = UDim2.new(0, 0, 0, s.Y + 6)
+end)
+
+-- Refresh player list UI
+local function refreshList()
+    -- destroy old UI entries
+    for _, v in pairs(UIEntries) do
+        if v and v:IsDescendantOf(scroll) then
+            v:Destroy()
+        end
+    end
+    table.clear(UIEntries)
+
+    local players = Players:GetPlayers()
+    table.sort(players, function(a,b) return a.Name:lower() < b.Name:lower() end)
+
+    for i, plr in ipairs(players) do
+        if plr ~= LocalPlayer then
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, 0, 0, EntryHeight)
+            btn.BackgroundColor3 = Color3.fromRGB(45,45,45)
+            btn.BorderSizePixel = 0
+            btn.Font = Enum.Font.SourceSans
+            btn.TextScaled = true -- text auto scales to fit (handles long names)
+            btn.Text = plr.Name
+            btn.TextColor3 = Color3.fromRGB(220,220,220)
+            btn.LayoutOrder = i
+            btn.Parent = scroll
+
+            -- initial highlight state
+            if Selected[plr] then
+                btn.BackgroundColor3 = Color3.fromRGB(0,170,80) -- green
+            end
+
+            -- toggle selection
+            btn.MouseButton1Click:Connect(function()
+                if Selected[plr] then
+                    -- deselect
+                    Selected[plr] = nil
+                    btn.BackgroundColor3 = Color3.fromRGB(45,45,45)
+                    if AuraParts[plr] then
+                        pcall(function() AuraParts[plr]:Destroy() end)
+                        AuraParts[plr] = nil
+                    end
+                else
+                    -- select
+                    Selected[plr] = true
+                    btn.BackgroundColor3 = Color3.fromRGB(0,170,80)
+                    -- create aura part immediately (if char exists)
+                    local hrp = getHRP(plr)
+                    if hrp then
+                        local p = createInvisiblePart(AuraTargetSize)
+                        p.CFrame = hrp.CFrame
+                        AuraParts[plr] = p
+                    end
+                end
+            end)
+
+            UIEntries[plr] = btn
+        end
+    end
+end
+
+-- Live update: players joining/leaving
+Players.PlayerAdded:Connect(function()
+    refreshList()
+end)
+Players.PlayerRemoving:Connect(function(plr)
+    -- cleanup selected and aura
+    if Selected[plr] then Selected[plr] = nil end
+    if AuraParts[plr] then
+        pcall(function() AuraParts[plr]:Destroy() end)
+        AuraParts[plr] = nil
+    end
+    refreshList()
+end)
+
+-- Also refresh if character respawns (names stay same)
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function() 
+        -- small delay so HRP exists
+        task.wait(0.2)
+        if Selected[plr] and not AuraParts[plr] then
+            local hrp = getHRP(plr)
+            if hrp then
+                local p = createInvisiblePart(AuraTargetSize)
+                p.CFrame = hrp.CFrame
+                AuraParts[plr] = p
+            end
+        end
+    end)
+end)
+
+-- initial build
+refreshList()
+
+-- ===== Self aura (for nearby damage) =====
+local SelfAura = createInvisiblePart(SelfAuraSize)
+SelfAura.Name = "LocalSelfAura"
+SelfAura.Parent = workspace
+SelfAura.CanTouch = true -- allow touch firing if using firetouchinterest
+SelfAura.Transparency = 1
+
+local function updateSelfAura()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        local hrp = char.HumanoidRootPart
+        SelfAura.CFrame = hrp.CFrame
+    else
+        -- hide away
+        SelfAura.CFrame = CFrame.new(0, -5000, 0)
+    end
+end
+
+-- ===== Attack hooking / perform attack =====
+-- Helper: find a tool handle or touch-enabled part to fire against aura parts
+local function getActiveToolHandle()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    for _, obj in ipairs(char:GetChildren()) do
+        if obj:IsA("Tool") then
+            -- prefer an actual Handle
+            local handle = obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart", true)
+            if handle then
+                return obj, handle
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function getFightEventFromTool(tool)
+    if not tool then return nil end
+    local ev = tool:FindFirstChild("FightEvent")
+    if ev and ev:IsA("RemoteEvent") then return ev end
+    -- some games use different names - try FindFirstChildOfClass
+    for _, child in ipairs(tool:GetChildren()) do
+        if child:IsA("RemoteEvent") then
+            return child
+        end
+    end
+    return nil
+end
+
+-- Fire touch interest safely (pcall) - requires executor env to actually run
+local function touchPartOnce(toolHandle, targetPart)
+    if not toolHandle or not targetPart then return end
+    pcall(function()
+        -- use the classic exploit function if present
+        if touchPart then
+            touchPart(toolHandle, targetPart)
+        elseif firetouchinterest then
+            firetouchinterest(toolHandle, targetPart, 0)
+            firetouchinterest(toolHandle, targetPart, 1)
+            firetouchinterest(toolHandle, targetPart, 0)
+        else
+            -- fallback: set CanTouch true and try moving the handle quickly (risky)
+            -- skip fallback to avoid messing with game physics
+        end
+    end)
+end
+
+-- Primary attack routine that tries selected targets first, then local aura hits
+local lastAttack = 0
+local function performAttack()
+    if tick() - lastAttack < AttackInterval * 0.9 then return end
+    lastAttack = tick()
+
+    local tool, handle = getActiveToolHandle()
+    if not tool then return end
+
+    -- try remote event first (if tool exposes one)
+    local fightEvent = getFightEventFromTool(tool)
+
+    -- 1) Attack selected players via aura parts
+    for plr, part in pairs(AuraParts) do
+        if part and part.Parent and Selected[plr] then
+            -- only if their HRP is alive and we still consider them selected
+            local hrp = getHRP(plr)
+            if hrp then
+                if fightEvent then
+                    -- many games accept HRP or model; this depends on the game.
+                    -- We'll try to send HRP first, fallback to player
+                    pcall(function()
+                        fightEvent:FireServer(hrp)
+                    end)
+                end
+                -- also attempt touch event on aura part (exploit function)
+                if UseFireTouchIfAvailable and handle then
+                    touchPartOnce(handle, part)
+                end
+            else
+                -- player may have left or died: cleanup
+                Selected[plr] = nil
+                if UIEntries[plr] then UIEntries[plr].BackgroundColor3 = Color3.fromRGB(45,45,45) end
+                if AuraParts[plr] then
+                    pcall(function() AuraParts[plr]:Destroy() end)
+                    AuraParts[plr] = nil
+                end
+            end
+        end
+    end
+
+    -- 2) Attack using local aura (nearby players) by touching SelfAura or firing fightEvent to nearby HRPs
+    -- we find nearby characters via workspace region around SelfAura
+    if handle then
+        -- if SelfAura exists, use its position to find parts in box
+        local regionSize = Vector3.new(8,8,8)
+        local boxCenter = SelfAura.CFrame
+        local parts = workspace:GetPartBoundsInBox(boxCenter, regionSize)
+        for _, p in ipairs(parts) do
+            local m = p:FindFirstAncestorWhichIsA("Model")
+            if m and m ~= LocalPlayer.Character and m:FindFirstChildOfClass("Humanoid") then
+                -- try to fire remote for that HRP if available
+                local targetHRP = m:FindFirstChild("HumanoidRootPart")
+                if fightEvent and targetHRP then
+                    pcall(function() fightEvent:FireServer(targetHRP) end)
+                end
+                -- also attempt touch on the specific part
+                if UseFireTouchIfAvailable and handle and p then
+                    touchPartOnce(handle, p)
+                end
+            end
+        end
+    end
+end
+
+-- Auto-run attack on a loop while Enabled
+task.spawn(function()
+    while true do
+        if Enabled then
+            performAttack()
+        end
+        task.wait(AttackInterval)
+    end
+end)
+
+-- ===== Update AuraParts positions every render step =====
+RunService.RenderStepped:Connect(function()
+    -- update self aura position
+    updateSelfAura()
+
+    -- update target aura parts to follow selected players
+    for plr, _ in pairs(Selected) do
+        if plr then
+            local hrp = getHRP(plr)
+            if hrp then
+                local p = AuraParts[plr]
+                if not p then
+                    p = createInvisiblePart(AuraTargetSize)
+                    AuraParts[plr] = p
+                end
+                -- Slight smoothing to avoid teleport detection in some games
+                p.CFrame = hrp.CFrame
+            else
+                -- cleanup if no hrp
+                if AuraParts[plr] then
+                    pcall(function() AuraParts[plr]:Destroy() end)
+                    AuraParts[plr] = nil
+                end
+            end
+        end
+    end
+
+    -- ensure any AuraParts for unselected players are removed
+    for plr, p in pairs(AuraParts) do
+        if not Selected[plr] then
+            pcall(function() p:Destroy() end)
+            AuraParts[plr] = nil
+        end
+    end
+end)
+
+-- Toggle aura enabled state from GUI (also display state on button)
+local function setEnabled(state)
+    Enabled = state
+    if Enabled then
+        auraBtn.Text = "AURA (ON)"
+        auraBtn.BackgroundColor3 = Color3.fromRGB(0,150,80)
+    else
+        auraBtn.Text = "AURA"
+        auraBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    end
+end
+
+-- toggle on right-click (or Shift+click)
+auraBtn.MouseButton2Click:Connect(function() setEnabled(not Enabled) end)
+auraBtn:GetPropertyChangedSignal("Text"):Connect(function() end) -- placeholder
+
+-- quick toggle with left-click while holding shift to enable/disable (avoid accidental)
+auraBtn.MouseButton1Click:Connect(function()
+    if dropdown.Visible then return end -- if dropdown open, don't toggle enabling
+    if (game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.LeftShift)) then
+        setEnabled(not Enabled)
+    end
+end)
+
+-- Convenience buttons: Select All / Deselect All in header
+local selectAllBtn = Instance.new("TextButton")
+selectAllBtn.Size = UDim2.new(0, 80, 0, 20)
+selectAllBtn.Position = UDim2.new(0, 6, 0, 2)
+selectAllBtn.AnchorPoint = Vector2.new(0, 0)
+selectAllBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+selectAllBtn.BorderSizePixel = 0
+selectAllBtn.Font = Enum.Font.SourceSans
+selectAllBtn.Text = "All"
+selectAllBtn.TextScaled = true
+selectAllBtn.TextColor3 = Color3.fromRGB(220,220,220)
+selectAllBtn.Parent = dropdown
+
+local deselectAllBtn = Instance.new("TextButton")
+deselectAllBtn.Size = UDim2.new(0, 80, 0, 20)
+deselectAllBtn.Position = UDim2.new(0, 94, 0, 2)
+deselectAllBtn.AnchorPoint = Vector2.new(0, 0)
+deselectAllBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+deselectAllBtn.BorderSizePixel = 0
+deselectAllBtn.Font = Enum.Font.SourceSans
+deselectAllBtn.Text = "None"
+deselectAllBtn.TextScaled = true
+deselectAllBtn.TextColor3 = Color3.fromRGB(220,220,220)
+deselectAllBtn.Parent = dropdown
+
+selectAllBtn.MouseButton1Click:Connect(function()
+    for plr, btn in pairs(UIEntries) do
+        if plr and btn then
+            Selected[plr] = true
+            btn.BackgroundColor3 = Color3.fromRGB(0,170,80)
+            if not AuraParts[plr] then
+                local hrp = getHRP(plr)
+                if hrp then
+                    local p = createInvisiblePart(AuraTargetSize)
+                    p.CFrame = hrp.CFrame
+                    AuraParts[plr] = p
+                end
+            end
+        end
+    end
+end)
+
+deselectAllBtn.MouseButton1Click:Connect(function()
+    for plr, btn in pairs(UIEntries) do
+        if plr and btn then
+            Selected[plr] = nil
+            btn.BackgroundColor3 = Color3.fromRGB(45,45,45)
+            if AuraParts[plr] then
+                pcall(function() AuraParts[plr]:Destroy() end)
+                AuraParts[plr] = nil
+            end
+        end
+    end
+end)
+
+-- Clean up on script disable/destroy if needed
+local function cleanup()
+    for plr, p in pairs(AuraParts) do
+        pcall(function() p:Destroy() end)
+        AuraParts[plr] = nil
+    end
+    if SelfAura then
+        pcall(function() SelfAura:Destroy() end)
+    end
+    if screen and screen.Parent then screen:Destroy() end
+end
+
+-- Bind F key to quick toggle (optional)
+local UserInputService = game:GetService("UserInputService")
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.F then
+        setEnabled(not Enabled)
+    end
+end)
+
+-- Final notes in output
+print("[Aura] Script loaded. Open dropdown with AURA button. Shift+LeftClick to enable/disable while dropdown closed. Right-click to toggle too.")
+print("[Aura] Use Select All / None for quick selection. Test only on private servers.")
