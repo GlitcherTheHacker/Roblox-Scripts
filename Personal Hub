@@ -8,30 +8,6 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local CoreGui = game:GetService("CoreGui")
 
--- ===== Verification System =====
-local allowedIDs = {
---  ==[ My Accs ]==  
-    3972688973, -- My Main
-    2522193455, -- My Alt
-    9616513682, -- My Alt
-    5041628737, -- My Alt
-    2647384879, -- My Alt
---  ==[ Others ]==
-
-}
-
-local function isVerified(userId)
-    for _, id in ipairs(allowedIDs) do
-        if userId == id then return true end
-    end
-    return false
-end
-
-if not isVerified(LocalPlayer.UserId) then
-    LocalPlayer:Kick("You are not authorized to use this hub.")
-    return
-end
-
 -- ======= Config / Defaults =======
 local DEFAULT_THEME = {
     Accent = Color3.fromRGB(98, 53, 255),
