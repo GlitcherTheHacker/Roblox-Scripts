@@ -619,6 +619,39 @@ updatesLabel:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
 end)
 updatesScroll.CanvasSize = UDim2.new(0, 0, 0, updatesLabel.AbsoluteSize.Y + 20)
 
+-- 🔒 Verified Page (only visible to whitelisted users)
+if isVerified(LocalPlayer.UserId) then
+    local secretPage = createPage("Developer Panel")
+
+    local header = Instance.new("TextLabel")
+    header.Size = UDim2.new(1, -24, 0, 26)
+    header.BackgroundTransparency = 1
+    header.Font = Enum.Font.GothamBold
+    header.TextSize = 16
+    header.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+    header.TextXAlignment = Enum.TextXAlignment.Left
+    header.Text = "Developer Panel"
+    header.Parent = verifiedPage
+
+    local info = Instance.new("TextLabel")
+    info.Size = UDim2.new(1, -20, 0, 60)
+    info.BackgroundTransparency = 1
+    info.TextWrapped = true
+    info.Font = Enum.Font.Gotham
+    info.TextSize = 14
+    info.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
+    info.Text = "Welcome, verified user. This page is restricted to trusted users only."
+    info.Parent = verifiedPage
+
+local secrets = {
+    {"God Cooldown", "print('Coming Soon')"}
+}
+for i, t in ipairs(secrets) do
+    local row = createActionButton(t[1], t[2])
+    row.LayoutOrder = 10 + i
+    row.Parent = secretPage
+end
+
 -- Tools page
 local toolsPage = createPage("Tool Scripts")
 local toolsHeader = Instance.new("TextLabel")
@@ -868,7 +901,7 @@ local btnPlayer = createSidebarButton("Player Scripts", 4)
 local btnOther = createSidebarButton("Other Scripts", 5)
 local btnSettings = createSidebarButton("Settings", 6)
 
-showPage("Welcome")
+showPage("Updates")
 
 -- ======= Close + Minimize (robust) =======
 local minimized = false
