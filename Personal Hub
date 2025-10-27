@@ -602,16 +602,8 @@ updatesLabel.Size = UDim2.new(1, -10, 0, 0)
 updatesLabel.Position = UDim2.new(0, 5, 0, 0)
 updatesLabel.BackgroundTransparency = 1
 updatesLabel.Text = [[
-📝 Updates: 10/4/25
-- Fixed the hub minimization breaking
-- Change the theme slightly
-- Fixed draggability
-- Sliders should now update properly
-- No cooldown, slight enhancement
-- Insta-Kill major enhancement
-- Damage modifications
-- Use Tools Fix
-- Loopbring Button draggable
+📝 Updates: 10/27/25
+- New form of Aura (thanks ghostly) This is loopbring but on a whole-nother level. basically, you select somoenes user, and they get an aura around them,a nd all your hits land on then, just like loop, but without the loop. this is actually better then using loop because loop slows down a lot of things and can cause you to die quicker, so using this is much prefered. 
 ]]
 updatesLabel.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 updatesLabel.TextWrapped = true
@@ -644,7 +636,7 @@ local tools = {
     {"Use Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Use%20Tools"},
     {"OP No Cooldown", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20No%20Coooldown"},
     {"OP Insta-Kill", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Insta-Kill"},
-    {"Kill Aura", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Kill%20Aura"},
+    {"Target Aura", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Target%20Aura"},
 }
 for i, t in ipairs(tools) do
     local row = createActionButton(t[1], t[2])
