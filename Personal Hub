@@ -8,6 +8,20 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local CoreGui = game:GetService("CoreGui")
 
+-- ======= Verification System =======
+local VERIFIED_USERS = {
+    2522193455, -- Hub Creator
+}
+
+local function isVerified(userId)
+    for _, id in ipairs(VERIFIED_USERS) do
+        if id == userId then
+            return true
+        end
+    end
+    return false
+end
+
 -- ======= Config / Defaults =======
 local DEFAULT_THEME = {
     Accent = Color3.fromRGB(98, 53, 255),
