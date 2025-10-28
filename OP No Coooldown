@@ -1,74 +1,36 @@
--- ⚡ MAX-PERFORMANCE NO COOLDOWN (No-Animation + Frame-Priority)
+-- No Cooldown
 
 local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local Stats = game:GetService("Stats")
 
-local LocalPlayer = Players.LocalPlayer
-local networkPing = 0.02
-local cachedEnemies = {}
-local maxRange = 20
-local minTick = 0.0015  -- 🔥 absolute minimum
-local burstCount = 3    -- small burst per frame for harder hits
+hookfunction(wait, function()
 
--- 🔁 function hooks
-hookfunction(wait, function() return RunService.Stepped:Wait() end)
-hookfunction(task.wait, function() return RunService.Stepped:Wait() end)
-hookfunction(delay, function(_, f) task.defer(f) end)
-hookfunction(spawn, function(f) task.defer(f) end)
-
--- 🧠 Enemy cache
-local function rebuildCache()
-	table.clear(cachedEnemies)
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr ~= LocalPlayer and plr.Character then
-			local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				cachedEnemies[#cachedEnemies + 1] = hrp
-			end
-		end
-	end
-end
-Players.PlayerAdded:Connect(rebuildCache)
-Players.PlayerRemoving:Connect(rebuildCache)
-RunService.Heartbeat:Connect(function()
-	for _, plr in ipairs(Players:GetPlayers()) do
-		local c = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-		if plr ~= LocalPlayer and c and not table.find(cachedEnemies, c) then
-			rebuildCache()
-			break
-		end
-	end
+    return RunService.Stepped:Wait()
 end)
 
--- ⚡ MAIN LOOP
-local nextSend = 0
-RunService.Stepped:Connect(function(_, dt)
-	local now = os.clock()
-	if now < nextSend then return end
-
-	local char = LocalPlayer.Character
-	if not char then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	local tool = char:FindFirstChildOfClass("Tool")
-	if not (hrp and tool) then return end
-
-	local fightEvent = tool:FindFirstChild("FightEvent")
-	if not fightEvent then return end
-
-	local pingStat = Stats.Network.ServerStatsItem["Data Ping"]
-	local ping = pingStat and pingStat:GetValue() / 1000 or networkPing
-	local interval = math.clamp(ping * 0.6, minTick, 0.025)
-	nextSend = now + interval
-
-	-- 🌀 Burst mode: rapid micro-fire for each target in range
-	for _, enemy in ipairs(cachedEnemies) do
-		if (hrp.Position - enemy.Position).Magnitude <= maxRange then
-			for i = 1, burstCount do
-				fightEvent:FireServer(enemy)
-			end
-		end
-	end
+hookfunction(task.wait, function()
+   
+    return RunService.PostSimulation:Wait()
 end)
 
-print("✅NO COOLDOWN loaded (silent, frame-priority)")
+hookfunction(delay, function(_, f)
+    task.spawn(f)
+end)
+
+hookfunction(spawn, function(f)
+    task.spawn(f)
+end)
+
+local tickCount = 0
+
+task.spawn(function()
+    while true do
+        -- No yielding until absolutely necessary — only minimal micro-wait to prevent crash.
+        tickCount += 1
+      
+        if tickCount % 10 == 0 then
+            RunService.Heartbeat:Wait() -- prevent total freeze every few cycles
+        end
+    end
+end)
+
+print("🔥 No Cooldown initialized — pushing engine tick rate to theoretical max.")
