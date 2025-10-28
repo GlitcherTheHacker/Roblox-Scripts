@@ -649,9 +649,9 @@ if isVerified(LocalPlayer.UserId) then
     toolsHeader.Parent = secretPage
 
     local secrets = {
-    {"God Cooldown", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/GND%20HUb"}
+    {"God Cooldown", "..."}
     }
-    for i, t in ipairs(tools) do
+    for i, t in ipairs(secrets) do
         local row = createActionButton(t[1], t[2])
         row.LayoutOrder = 10 + i
         row.Parent = secretPage
