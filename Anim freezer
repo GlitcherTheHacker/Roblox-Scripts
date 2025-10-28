@@ -1,0 +1,62 @@
+-- ⚡ PERMANENT ANIMATION FREEZE v2 ⚡
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- CONFIG
+local delayBeforeFreeze = 3.5 -- seconds after respawn to allow idle anims to load
+local freezeCheckInterval = 0.2 -- refresh interval to ensure Animator stays disabled
+
+-- FUNCTION: disables all animations on a given character
+local function freezeAnimations(char)
+	if not char then return end
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
+
+	-- stop all currently playing animation tracks
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if animator then
+		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+			track:Stop(0)
+		end
+		animator:Destroy()
+	end
+
+	-- disable Animate script so no new animations play
+	local animateScript = char:FindFirstChild("Animate")
+	if animateScript then
+		animateScript.Disabled = true
+	end
+
+	-- repeatedly enforce frozen state in case Roblox regenerates the animator
+	task.spawn(function()
+		while char and char.Parent do
+			if humanoid and humanoid:FindFirstChildOfClass("Animator") then
+				humanoid:FindFirstChildOfClass("Animator"):Destroy()
+			end
+			local animScript = char:FindFirstChild("Animate")
+			if animScript and not animScript.Disabled then
+				animScript.Disabled = true
+			end
+			task.wait(freezeCheckInterval)
+		end
+	end)
+end
+
+-- FUNCTION: applies after respawn with a short delay
+local function onCharacterAdded(char)
+	task.spawn(function()
+		-- wait for Humanoid and Animator to fully load
+		local humanoid = char:WaitForChild("Humanoid", 5)
+		task.wait(delayBeforeFreeze)
+		freezeAnimations(char)
+	end)
+end
+
+-- INITIALIZE
+LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+if LocalPlayer.Character then
+	onCharacterAdded(LocalPlayer.Character)
+end
+
+print("✅ Animation Freeze loaded. All animations will stop after respawn grace period.")
