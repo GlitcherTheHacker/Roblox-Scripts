@@ -616,8 +616,11 @@ updatesLabel.Size = UDim2.new(1, -10, 0, 0)
 updatesLabel.Position = UDim2.new(0, 5, 0, 0)
 updatesLabel.BackgroundTransparency = 1
 updatesLabel.Text = [[
-📝 Updates: 10/27/25
+📝 Updates: 
+10/27/25
 - New form of Aura (thanks ghostly) This is loopbring but on a whole-nother level. basically, you select somoenes user, and they get an aura around them,a nd all your hits land on then, just like loop, but without the loop. this is actually better then using loop because loop slows down a lot of things and can cause you to die quicker, so using this is much prefered. 
+10/28/25
+- No Cooldown Update - Speed at its THEORETICAL maximum, that meaning it cannot possibly get any faster then this unless you go to extents that would entirely break your game. you should be very OP with this now.
 ]]
 updatesLabel.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 updatesLabel.TextWrapped = true
