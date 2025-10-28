@@ -1,56 +1,92 @@
--- ⚡ PERMANENT ANIMATION FREEZE v2 ⚡
+-- ⚡ IDLE-ONLY ANIMATION LOCK v3 ⚡
+-- Allows only idle animations to play. All others (walk, jump, climb, etc.) are blocked.
+-- Works across respawns and animation reloads.
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
 -- CONFIG
-local delayBeforeFreeze = 3.5 -- seconds after respawn to allow idle anims to load
-local freezeCheckInterval = 0.2 -- refresh interval to ensure Animator stays disabled
+local checkInterval = 0.25 -- how often to recheck Animator and enforce the lock
+local allowedAnims = {} -- will be filled with actual idle animation IDs dynamically
 
--- FUNCTION: disables all animations on a given character
-local function freezeAnimations(char)
-	if not char then return end
-	local humanoid = char:FindFirstChildOfClass("Humanoid")
-	if not humanoid then return end
+-- FUNCTION: Extract idle animation IDs
+local function getIdleAnimations(char)
+	local animScript = char:FindFirstChild("Animate")
+	if not animScript then return {} end
+	local idleBlock = animScript:FindFirstChild("idle")
+	if not idleBlock then return {} end
 
-	-- stop all currently playing animation tracks
-	local animator = humanoid:FindFirstChildOfClass("Animator")
-	if animator then
-		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-			track:Stop(0)
+	local ids = {}
+	for _, val in ipairs(idleBlock:GetChildren()) do
+		if val:IsA("Animation") and val.AnimationId ~= "" then
+			table.insert(ids, val.AnimationId)
 		end
-		animator:Destroy()
+	end
+	return ids
+end
+
+-- FUNCTION: Enforce idle-only animations
+local function enforceIdleOnly(char)
+	if not char then return end
+	local humanoid = char:WaitForChild("Humanoid", 5)
+	if not humanoid then return end
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+
+	-- Capture current idle animation IDs
+	allowedAnims = getIdleAnimations(char)
+	if #allowedAnims == 0 then
+		warn("⚠ No idle animations detected. Default Roblox idle anims will still be blocked.")
 	end
 
-	-- disable Animate script so no new animations play
-	local animateScript = char:FindFirstChild("Animate")
-	if animateScript then
-		animateScript.Disabled = true
+	-- Hook animation loading
+	local function blockNonIdle(track)
+		local anim = track and track.Animation
+		if anim and anim.AnimationId ~= "" then
+			local allowed = false
+			for _, id in ipairs(allowedAnims) do
+				if anim.AnimationId == id then
+					allowed = true
+					break
+				end
+			end
+			if not allowed then
+				-- stop disallowed animation immediately
+				task.defer(function()
+					if track.IsPlaying then track:Stop(0) end
+					track:Destroy()
+				end)
+			end
+		end
 	end
 
-	-- repeatedly enforce frozen state in case Roblox regenerates the animator
+	-- Connect to Animator events
+	if animator then
+		animator.AnimationPlayed:Connect(blockNonIdle)
+	end
+
+	-- Continuous enforcement loop (handles reinserted animators or changed scripts)
 	task.spawn(function()
 		while char and char.Parent do
-			if humanoid and humanoid:FindFirstChildOfClass("Animator") then
-				humanoid:FindFirstChildOfClass("Animator"):Destroy()
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			if hum then
+				local animr = hum:FindFirstChildOfClass("Animator")
+				if animr and not animr:FindFirstChild("IdleLockConnected") then
+					animr.AnimationPlayed:Connect(blockNonIdle)
+					local tag = Instance.new("BoolValue")
+					tag.Name = "IdleLockConnected"
+					tag.Parent = animr
+				end
 			end
-			local animScript = char:FindFirstChild("Animate")
-			if animScript and not animScript.Disabled then
-				animScript.Disabled = true
-			end
-			task.wait(freezeCheckInterval)
+			task.wait(checkInterval)
 		end
 	end)
 end
 
--- FUNCTION: applies after respawn with a short delay
+-- HANDLER: On character spawn
 local function onCharacterAdded(char)
-	task.spawn(function()
-		-- wait for Humanoid and Animator to fully load
-		local humanoid = char:WaitForChild("Humanoid", 5)
-		task.wait(delayBeforeFreeze)
-		freezeAnimations(char)
-	end)
+	task.wait(2) -- allow default idle anim to start naturally
+	enforceIdleOnly(char)
 end
 
 -- INITIALIZE
@@ -59,4 +95,4 @@ if LocalPlayer.Character then
 	onCharacterAdded(LocalPlayer.Character)
 end
 
-print("✅ Animation Freeze loaded. All animations will stop after respawn grace period.")
+print("✅ Idle-Only Animation Lock loaded — only idle animations will ever play.")
