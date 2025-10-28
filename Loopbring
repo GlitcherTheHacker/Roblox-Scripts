@@ -1,4 +1,4 @@
--- Loopbring GUI - Clean Compact Edition
+-- Loopbring GUI - Character-Only Edition
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local bringTargets = {}
@@ -71,17 +71,30 @@ scroll.ScrollBarThickness = 5
 local layout = Instance.new("UIListLayout", scroll)
 layout.Padding = UDim.new(0, 3)
 
--- Core Loopbring Logic
+-- Core Logic (Character-Only Bring)
+local function hideNonCharacterItems(char)
+	for _, item in ipairs(char:GetChildren()) do
+		if item:IsA("Tool") or item:IsA("Accessory") or item:IsA("Hat") or item:IsA("Model") then
+			item.Parent = nil -- hide locally
+		end
+	end
+end
+
 local function updateTeleportation()
-	local char = LocalPlayer.Character
-	local root = char and char:FindFirstChild("HumanoidRootPart")
-	if not root then return end
+	local myChar = LocalPlayer.Character
+	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+	if not myRoot then return end
+
 	for _, name in ipairs(bringTargets) do
 		local plr = Players:FindFirstChild(name)
-		if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-			local target = plr.Character.HumanoidRootPart
-			local pos = root.Position + root.CFrame.LookVector * distance
-			target.CFrame = CFrame.new(pos, root.Position) * CFrame.Angles(0, math.rad(180), 0)
+		if plr and plr.Character then
+			local char = plr.Character
+			local targetRoot = char:FindFirstChild("HumanoidRootPart")
+			if targetRoot then
+				hideNonCharacterItems(char)
+				local newPos = myRoot.Position + myRoot.CFrame.LookVector * distance
+				targetRoot.CFrame = CFrame.new(newPos, myRoot.Position) * CFrame.Angles(0, math.rad(180), 0)
+			end
 		end
 	end
 end
@@ -102,7 +115,7 @@ local function stopBring(name)
 	if i then table.remove(bringTargets, i) end
 end
 
--- Player Buttons
+-- Player List Refresh
 local function refreshList()
 	for _, c in ipairs(scroll:GetChildren()) do
 		if c:IsA("TextButton") then c:Destroy() end
@@ -116,7 +129,9 @@ local function refreshList()
 			btn.Font = Enum.Font.Gotham
 			btn.TextScaled = true
 			btn.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
-			btn.TextColor3 = table.find(bringTargets, p.Name) and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 255, 0)
+			btn.TextColor3 = table.find(bringTargets, p.Name)
+				and Color3.fromRGB(255, 255, 255)
+				or Color3.fromRGB(0, 255, 0)
 			Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 			btn.MouseButton1Click:Connect(function()
 				if table.find(bringTargets, p.Name) then
@@ -131,32 +146,22 @@ local function refreshList()
 	scroll.CanvasSize = UDim2.new(0, 0, 0, #Players:GetPlayers() * 32)
 end
 
-Players.PlayerAdded:Connect(function(p)
-	refreshList()
-	if table.find(bringTargets, p.Name) then loopBring(p.Name) end
-end)
+Players.PlayerAdded:Connect(refreshList)
 Players.PlayerRemoving:Connect(function(p)
 	stopBring(p.Name)
 	refreshList()
 end)
 
 -- Drag Functionality
-local dragging = false
-local dragInput, dragStart, startPos
+local dragging, dragInput, dragStart, startPos
 
 local function updatePosition(input)
 	if dragging and dragStart and startPos then
-		local delta
-		if input.UserInputType == Enum.UserInputType.MouseMovement then
-			delta = input.Position - dragStart
-		else -- touch input
-			delta = input.Position - dragStart
-		end
+		local delta = input.Position - dragStart
 		toggleBtn.Position = UDim2.new(
 			startPos.X.Scale, startPos.X.Offset + delta.X,
 			startPos.Y.Scale, startPos.Y.Offset + delta.Y
 		)
-		-- Move frame to the left of button
 		frame.Position = UDim2.new(
 			0, toggleBtn.AbsolutePosition.X - frame.AbsoluteSize.X - 5,
 			0, toggleBtn.AbsolutePosition.Y
@@ -164,7 +169,6 @@ local function updatePosition(input)
 	end
 end
 
--- Drag events
 toggleBtn.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		dragging = true
@@ -183,7 +187,6 @@ toggleBtn.InputChanged:Connect(updatePosition)
 toggleBtn.MouseButton1Click:Connect(function()
 	frame.Visible = not frame.Visible
 end)
-
 plusBtn.MouseButton1Click:Connect(function()
 	distance += 1
 	distanceLabel.Text = "Distance: " .. distance
