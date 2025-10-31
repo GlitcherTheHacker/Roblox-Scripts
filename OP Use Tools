@@ -1,36 +1,68 @@
--- ⚡ USE TOOLS vX — Engine-Synced Overdrive Edition ⚡
--- Uses frame-locked execution and microthread activation to match No Cooldown’s peak rate
+-- ⚡ USE TOOLS
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
-local heartbeat = RunService.Heartbeat
 local postSim = RunService.PostSimulation
 
 -- === GUI SETUP ===
 local gui = Instance.new("ScreenGui")
 gui.Name = "UltraUseTools"
 gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 gui.Parent = game:GetService("CoreGui")
 
+-- Main toggle button (visible + right-middle anchored)
 local toggle = Instance.new("TextButton")
+toggle.Name = "UseToolsButton"
 toggle.Size = UDim2.new(0, 120, 0, 50)
-toggle.Position = UDim2.new(0.95, -120, 0.5, -25) -- Middle-right placement
+toggle.AnchorPoint = Vector2.new(1, 0.5)
+toggle.Position = UDim2.new(1, -20, 0.5, 0) -- Perfectly aligned right-center
 toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 toggle.Font = Enum.Font.GothamBlack
 toggle.Text = "OFF"
 toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggle.TextSize = 22
-Instance.new("UICorner", toggle).CornerRadius = UDim.new(0.3, 0)
+toggle.BorderSizePixel = 0
+toggle.AutoButtonColor = false
+toggle.Active = true
+toggle.Draggable = true
+toggle.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0.3, 0)
+corner.Parent = toggle
+
+-- Optional subtle shadow for visibility (mobile-safe)
+local shadow = Instance.new("Frame")
+shadow.Size = toggle.Size + UDim2.new(0, 6, 0, 6)
+shadow.Position = toggle.Position + UDim2.new(0, 3, 0, 3)
+shadow.AnchorPoint = toggle.AnchorPoint
+shadow.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+shadow.BackgroundTransparency = 0.6
+shadow.ZIndex = toggle.ZIndex - 1
+shadow.Parent = gui
+shadow.Visible = true
+
+-- Keep shadow following button if user drags it
+toggle:GetPropertyChangedSignal("Position"):Connect(function()
+	shadow.Position = toggle.Position + UDim2.new(0, 3, 0, 3)
+end)
 
 -- === STATE ===
 local active = false
 local function updateButton()
-	toggle.Text = active and "ON" or "OFF"
-	toggle.BackgroundColor3 = active and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
-	toggle.TextColor3 = active and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+	if active then
+		toggle.Text = "ON"
+		toggle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		toggle.TextColor3 = Color3.fromRGB(0, 0, 0)
+	else
+		toggle.Text = "OFF"
+		toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+	end
 end
 
 -- === TOGGLE FUNCTIONALITY ===
@@ -52,6 +84,7 @@ task.spawn(function()
 		if active then
 			local char = player.Character
 			if char then
+				-- Instantly move backpack tools to character
 				local backpack = player:FindFirstChild("Backpack")
 				if backpack then
 					for _, tool in ipairs(backpack:GetChildren()) do
@@ -61,7 +94,7 @@ task.spawn(function()
 					end
 				end
 
-				-- Micro-threaded activation for zero-delay response
+				-- Micro-threaded activations (as fast as possible without freezing)
 				for _, tool in ipairs(char:GetChildren()) do
 					if tool:IsA("Tool") then
 						task.spawn(function()
@@ -74,16 +107,18 @@ task.spawn(function()
 			end
 		end
 
-		-- Sub-frame timing: executes between render and physics steps
+		-- Frame-locked loop: PostSimulation = max performance / lowest latency
 		postSim:Wait()
 	end
 end)
 
 -- === CHARACTER RESET HANDLER ===
 player.CharacterAdded:Connect(function()
-	task.wait(1)
+	task.wait(0.75)
 	active = false
 	updateButton()
 end)
 
-print("⚙️ Use Tools vX (Engine Overdrive) initialized at max runtime speed.")
+updateButton()
+
+print("⚙️ Ultra Use Tools
