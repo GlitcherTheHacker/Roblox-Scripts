@@ -1,5 +1,4 @@
 -- ⚡ No Cooldown — ENGINE OVERDRIVE MODE ⚡
--- Designed for absolute local execution speed and responsiveness
 
 local RunService = game:GetService("RunService")
 
