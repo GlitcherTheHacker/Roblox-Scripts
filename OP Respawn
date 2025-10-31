@@ -1,63 +1,78 @@
--- RESPAWN (Perfect Sync)
+-- ⚡ ULTRA-INSTANT RESPAWN
+-- Detects death in the earliest possible tick, respawns instantly once.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
+-- === Fast Respawn Method ===
 local function forceRespawn()
-	if LocalPlayer:FindFirstChild("LoadCharacter") then
+	if LocalPlayer and LocalPlayer:FindFirstChild("LoadCharacter") then
 		LocalPlayer:LoadCharacter()
 	elseif ReplicatedStorage:FindFirstChild("Guide") then
-		ReplicatedStorage.Guide:FireServer()
+		pcall(function() ReplicatedStorage.Guide:FireServer() end)
+	else
+		-- Extreme fallback (should rarely happen)
+		LocalPlayer:LoadCharacter()
 	end
 end
 
+-- === Character Handler ===
 local function hookCharacter(char)
-	local humanoid = char:WaitForChild("Humanoid", 0.5)
+	local humanoid = char:WaitForChild("Humanoid", 0.2)
 	if not humanoid then return end
 
 	local respawned = false
-	local function safeRespawn()
-		if not respawned then
-			respawned = true
+	local function safeRespawn(trigger)
+		if respawned then return end
+		respawned = true
+
+		-- short delay helps prevent Roblox's cleanup race condition
+		task.defer(function()
 			forceRespawn()
-		end
+		end)
 	end
 
-	-- Primary: detect immediate health drop
+	-- === Primary Death Detection ===
 	humanoid:GetPropertyChangedSignal("Health"):Connect(function()
 		if humanoid.Health <= 0 then
-			safeRespawn()
+			safeRespawn("HealthChange")
 		end
 	end)
 
-	-- Backup: death event
-	humanoid.Died:Connect(safeRespawn)
+	-- === Secondary Death Event ===
+	humanoid.Died:Connect(function()
+		safeRespawn("DiedEvent")
+	end)
 
-	-- Frame-edge check (Heartbeat fires right as health hits 0)
+	-- === Frame-Level Watchdog ===
 	local hbConn
 	hbConn = RunService.Heartbeat:Connect(function()
-		if humanoid.Health <= 0 then
-			hbConn:Disconnect()
-			safeRespawn()
+		if not char or not humanoid or humanoid.Health <= 0 then
+			if hbConn then
+				hbConn:Disconnect()
+			end
+			safeRespawn("HeartbeatFailSafe")
 		end
 	end)
 
-	-- Fallback: humanoid removed
-	char.ChildRemoved:Connect(function(c)
-		if c == humanoid then
-			if hbConn then hbConn:Disconnect() end
-			safeRespawn()
+	-- === Model Teardown Fail-Safe ===
+	char.AncestryChanged:Connect(function(_, parent)
+		if not parent then
+			safeRespawn("ModelRemoved")
 		end
 	end)
 end
 
+-- === Attach to Character ===
 LocalPlayer.CharacterAdded:Connect(hookCharacter)
+
+-- === Start Immediately if Character Exists ===
 if LocalPlayer.Character then
 	hookCharacter(LocalPlayer.Character)
 else
 	forceRespawn()
 end
 
-print("✅ ULTRA-INSTANT RESPAWN loaded (frame-edge, single trigger)")
+print("💠 ULTRA-INSTANT RESPAWN loaded")
