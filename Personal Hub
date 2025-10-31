@@ -617,13 +617,16 @@ updatesLabel.Position = UDim2.new(0, 5, 0, 0)
 updatesLabel.BackgroundTransparency = 1
 updatesLabel.Text = [[
 📝 Updates: 
-10/27/25:
-- New form of Aura (thanks ghostly) This is loopbring but on a whole-nother level. basically, you select somoenes user, and they get an aura around them,a nd all your hits land on then, just like loop, but without the loop. this is actually better then using loop because loop slows down a lot of things and can cause you to die quicker, so using this is much prefered. 
+10/30/25
+- Updated all scripts, faster, stronger, ultra enhanced proficiency.
 
 10/28/25:
 - No Cooldown Update - Speed at its THEORETICAL maximum, that meaning it cannot possibly get any faster then this unless you go to extents that would entirely break your game. you should be very OP with this now.
 
 - Loopbring Update - People looped no longer have their tools shown when you loop them. this is to help prevent damage on your own charcter, plus help reduce lag.
+
+10/27/25:
+- New form of Aura (thanks ghostly) This is loopbring but on a whole-nother level. basically, you select somoenes user, and they get an aura around them,a nd all your hits land on then, just like loop, but without the loop. this is actually better then using loop because loop slows down a lot of things and can cause you to die quicker, so using this is much prefered. 
 ]]
 updatesLabel.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 updatesLabel.TextWrapped = true
