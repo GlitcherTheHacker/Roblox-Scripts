@@ -1,27 +1,35 @@
 -- ⚡ ULTRA-INSTANT TOOL GRABBER v10 ⚡
--- Optimized: cache pads, no full scan every frame
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Tycoons = workspace:WaitForChild("Tycoons")
 
--- CONFIG
-local hitPerFrame = 2
+-- === CONFIG ===
+local BURSTS_PER_PAD = 3          -- number of rapid subframe bursts per pad
+local BURST_INTERVAL = 0.008      -- delay between bursts (8ms)
 local allowedBases  = { "Stone", "Magic", "Storm" }
 local excludedBases = { "Insanity", "Giant", "Dark", "Spike", "Web", "Strong" }
 
--- convert to sets
+-- === INTERNALS ===
 local allowedSet, excludedSet = {}, {}
 for _, b in ipairs(allowedBases) do allowedSet[b] = true end
 for _, b in ipairs(excludedBases) do excludedSet[b] = true end
 
--- cache of all valid pads
-local pads = {}
+local pads = {}        -- cached pad parts
+local rootRef = nil    -- cached HumanoidRootPart reference
+local collecting = false
 
+-- === UTILITIES ===
 local function fireTouch(root, pad)
-    firetouchinterest(root, pad, 0)
-    firetouchinterest(root, pad, 1)
+    task.defer(firetouchinterest, root, pad, 0)
+    task.defer(firetouchinterest, root, pad, 1)
+end
+
+local function microBurst(root, pad)
+    for i = 1, BURSTS_PER_PAD do
+        fireTouch(root, pad)
+        task.wait(BURST_INTERVAL)
+    end
 end
 
 local function getRoot()
@@ -29,7 +37,6 @@ local function getRoot()
     return char and char:FindFirstChild("HumanoidRootPart")
 end
 
--- add pad to cache
 local function registerPad(pad)
     local baseModel = pad.Parent and pad.Parent.Parent
     if not baseModel then return end
@@ -39,19 +46,17 @@ local function registerPad(pad)
     end
 end
 
--- remove pad from cache
 local function unregisterPad(pad)
     pads[pad] = nil
 end
 
--- initialize existing pads
+-- === PAD CACHE INITIALIZATION ===
 for _, v in ipairs(Tycoons:GetDescendants()) do
     if v:IsA("TouchTransmitter") and v.Parent and v.Parent.Parent and v.Parent.Parent.Name:find("GearGiver1") then
         registerPad(v.Parent)
     end
 end
 
--- listen for new ones
 Tycoons.DescendantAdded:Connect(function(desc)
     if desc:IsA("TouchTransmitter") and desc.Parent and desc.Parent.Parent and desc.Parent.Parent.Name:find("GearGiver1") then
         registerPad(desc.Parent)
@@ -64,20 +69,50 @@ Tycoons.DescendantRemoving:Connect(function(desc)
     end
 end)
 
--- fire instantly on respawn
+-- === CHARACTER HOOKS ===
+local function triggerFullCollection()
+    if collecting then return end
+    collecting = true
+
+    rootRef = getRoot()
+    if not rootRef then
+        collecting = false
+        return
+    end
+
+    for pad in pairs(pads) do
+        task.spawn(function()
+            microBurst(rootRef, pad)
+        end)
+    end
+
+    collecting = false
+end
+
 LocalPlayer.CharacterAdded:Connect(function(char)
     char:WaitForChild("HumanoidRootPart", 2)
+    rootRef = char:WaitForChild("HumanoidRootPart")
+    triggerFullCollection()
+
+    -- Retry microbursts for first second (covers late-loading tycoons)
+    task.spawn(function()
+        local t = time()
+        while time() - t < 1.2 do
+            triggerFullCollection()
+            task.wait(0.1)
+        end
+    end)
 end)
 
--- main loop: only loop cached pads
+-- === CONTINUOUS HEARTBEAT LOOP ===
 RunService.Heartbeat:Connect(function()
-    local root = getRoot()
-    if not root then return end
+    rootRef = rootRef or getRoot()
+    if not rootRef then return end
     for pad in pairs(pads) do
-        for i = 1, hitPerFrame do
-            fireTouch(root, pad)
-        end
+        task.spawn(function()
+            microBurst(rootRef, pad)
+        end)
     end
 end)
 
-print("⚡ ULTRA-INSTANT TOOL GRABBER v10 loaded ⚡")
+print("⚡ ULTRA-INSTANT TOOL GRABBER v11 (MAX AGGRO MODE) loaded ⚡")
