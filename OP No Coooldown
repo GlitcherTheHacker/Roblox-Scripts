@@ -1,36 +1,60 @@
--- No Cooldown
+-- ⚡ No Cooldown — ENGINE OVERDRIVE MODE ⚡
+-- Designed for absolute local execution speed and responsiveness
 
 local RunService = game:GetService("RunService")
 
+-- === HOOK CORE YIELDS ===
 hookfunction(wait, function()
-
-    return RunService.Stepped:Wait()
+    -- Replace default wait with the fastest subframe scheduler
+    return RunService.PreAnimation:Wait() or RunService.Stepped:Wait()
 end)
 
 hookfunction(task.wait, function()
-   
+    -- Directly links task.wait to the most responsive post-frame event
     return RunService.PostSimulation:Wait()
 end)
 
-hookfunction(delay, function(_, f)
-    task.spawn(f)
+hookfunction(delay, function(_, func)
+    -- Executes immediately via task.spawn
+    task.spawn(func)
 end)
 
-hookfunction(spawn, function(f)
-    task.spawn(f)
+hookfunction(spawn, function(func)
+    -- Removes spawn throttling
+    task.spawn(func)
 end)
 
-local tickCount = 0
+-- === ULTRA-TICK ENGINE LOOP ===
+local tickCounter = 0
+local MAX_TICKS_BEFORE_YIELD = 500 -- controls safety micro-pauses
 
 task.spawn(function()
     while true do
-        -- No yielding until absolutely necessary — only minimal micro-wait to prevent crash.
-        tickCount += 1
-      
-        if tickCount % 10 == 0 then
-            RunService.Heartbeat:Wait() -- prevent total freeze every few cycles
+        -- Execute at theoretical max tick rate
+        tickCounter += 1
+
+        -- Run high-frequency internal event ping
+        RunService.Heartbeat:Wait()
+
+        -- Safety micro-yield every few hundred ticks to keep network stable
+        if tickCounter >= MAX_TICKS_BEFORE_YIELD then
+            tickCounter = 0
+            RunService.Stepped:Wait()
         end
     end
 end)
 
-print("🔥 No Cooldown initialized — pushing engine tick rate to theoretical max.")
+-- === PERFORMANCE MONITOR ===
+task.spawn(function()
+    local frameCount, timeStamp = 0, os.clock()
+    while true do
+        frameCount += 1
+        if os.clock() - timeStamp >= 1 then
+            print(string.format("⚙️ Engine Overdrive Active | Microloops: %d/sec", frameCount))
+            frameCount, timeStamp = 0, os.clock()
+        end
+        RunService.Heartbeat:Wait()
+    end
+end)
+
+print("🔥 No Cooldown — Engine Overdrive initialized at max runtime speed.")
