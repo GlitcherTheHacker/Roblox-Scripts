@@ -49,7 +49,6 @@ task.spawn(function()
     while true do
         frameCount += 1
         if os.clock() - timeStamp >= 1 then
-            print(string.format("⚙️ Engine Overdrive Active | Microloops: %d/sec", frameCount))
             frameCount, timeStamp = 0, os.clock()
         end
         RunService.Heartbeat:Wait()
