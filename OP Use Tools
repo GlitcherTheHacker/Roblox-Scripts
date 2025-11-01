@@ -1,35 +1,31 @@
--- ⚡ USE TOOLS — ENGINE OVERDRIVE EDITION ⚡
+-- ⚙️ USE TOOLS — ENGINE OVERDRIVE ULTIMATE EDITION ⚙️
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
+
 local player = Players.LocalPlayer
+local PreAnim, PostSim, Heartbeat, Stepped = RunService.PreAnimation, RunService.PostSimulation, RunService.Heartbeat, RunService.Stepped
 
--- === SERVICES & TIMERS ===
-local PreAnim = RunService.PreAnimation
-local PostSim = RunService.PostSimulation
-local Heartbeat = RunService.Heartbeat
-local Stepped = RunService.Stepped
-
--- === GUI SETUP ===
+-- === GUI INITIALIZATION ===
 local gui = Instance.new("ScreenGui")
 gui.Name = "UltraUseTools"
-gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
--- Create toggle button — positioned middle-right, visible on all devices
+-- Toggle Button (Middle-Right Placement)
 local toggle = Instance.new("TextButton")
 toggle.Size = UDim2.new(0, 120, 0, 50)
 toggle.AnchorPoint = Vector2.new(1, 0.5)
-toggle.Position = UDim2.new(1, -20, 0.5, 0) -- Right-middle of screen
+toggle.Position = UDim2.new(1, -20, 0.5, 0) -- Always visible on both PC and mobile
 toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 toggle.Font = Enum.Font.GothamBlack
 toggle.Text = "OFF"
 toggle.TextSize = 22
 toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggle.BorderSizePixel = 0
 toggle.AutoButtonColor = false
+toggle.BorderSizePixel = 0
 toggle.Active = true
 toggle.Draggable = true
 toggle.Parent = gui
@@ -38,7 +34,7 @@ local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0.3, 0)
 corner.Parent = toggle
 
--- Optional shadow for visual clarity (useful on mobile)
+-- Shadow layer for mobile clarity
 local shadow = Instance.new("Frame")
 shadow.Size = toggle.Size + UDim2.new(0, 6, 0, 6)
 shadow.AnchorPoint = toggle.AnchorPoint
@@ -47,15 +43,14 @@ shadow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 shadow.BackgroundTransparency = 0.6
 shadow.ZIndex = toggle.ZIndex - 1
 shadow.Parent = gui
-
 toggle:GetPropertyChangedSignal("Position"):Connect(function()
 	shadow.Position = toggle.Position + UDim2.new(0, 3, 0, 3)
 end)
 
 -- === STATE CONTROL ===
 local active = false
+local debounceTime = 0.00025 -- insane subframe responsiveness
 local lastActivation = os.clock()
-local debounceTime = 0.001 -- minimal debounce (1ms) to prevent execution collapse
 
 local function updateButton()
 	if active then
@@ -69,20 +64,22 @@ local function updateButton()
 	end
 end
 
--- === TOGGLE FUNCTION ===
+-- === ACTIVATE / DEACTIVATE BEHAVIOR ===
+local function unequipAll()
+	local char = player.Character
+	if not char then return end
+	for _, tool in ipairs(char:GetChildren()) do
+		if tool:IsA("Tool") then
+			tool.Parent = player.Backpack
+		end
+	end
+end
+
 local function toggleState()
 	active = not active
 	updateButton()
 	if not active then
-		-- Unequip all tools safely when deactivated
-		local char = player.Character
-		if char then
-			for _, tool in ipairs(char:GetChildren()) do
-				if tool:IsA("Tool") then
-					tool.Parent = player.Backpack
-				end
-			end
-		end
+		unequipAll()
 	end
 end
 
@@ -93,19 +90,19 @@ UIS.InputBegan:Connect(function(input, gp)
 	end
 end)
 
--- === ENGINE-LEVEL TOOL SPAM LOOP ===
+-- === ULTRA ENGINE LOOP (SPEED CORE) ===
 task.spawn(function()
+	local tickCounter = 0
 	while true do
 		if active then
 			local now = os.clock()
 			if now - lastActivation >= debounceTime then
 				lastActivation = now
-
 				local char = player.Character
 				if char then
 					local backpack = player:FindFirstChild("Backpack")
 					if backpack then
-						-- Instantly equip all tools from Backpack
+						-- Instant re-equip: zero delay between tool transfers
 						for _, tool in ipairs(backpack:GetChildren()) do
 							if tool:IsA("Tool") then
 								tool.Parent = char
@@ -113,7 +110,7 @@ task.spawn(function()
 						end
 					end
 
-					-- Hyper-threaded activation
+					-- Subframe, parallel activation burst
 					for _, tool in ipairs(char:GetChildren()) do
 						if tool:IsA("Tool") then
 							task.spawn(function()
@@ -126,18 +123,44 @@ task.spawn(function()
 				end
 			end
 		end
-		-- Frame-locked yield for subframe synchronization (same layer as No Cooldown)
+
+		-- Loop runs on the PostSimulation frame layer, one of the fastest cycles available.
 		PostSim:Wait()
 	end
 end)
 
--- === CHARACTER SYNC ===
-player.CharacterAdded:Connect(function()
-	task.wait(0.5)
-	active = false
-	updateButton()
+-- === ANIMATION SUPPRESSION ===
+-- This prevents Roblox’s default tool animations from running, keeping your character visually frozen.
+task.spawn(function()
+	while true do
+		local char = player.Character
+		if char then
+			local animate = char:FindFirstChild("Animate")
+			if animate then
+				animate.Disabled = true
+			end
+		end
+		Stepped:Wait() -- checks every frame cycle
+	end
+end)
+
+-- === INSTANT RESPAWN EQUIP REACTIVATION ===
+player.CharacterAdded:Connect(function(char)
+	char:WaitForChild("HumanoidRootPart", 5)
+	task.wait(0.15)
+	-- Maintain active state if toggle was ON before death
+	if active then
+		local backpack = player:FindFirstChild("Backpack")
+		if backpack then
+			for _, tool in ipairs(backpack:GetChildren()) do
+				if tool:IsA("Tool") then
+					tool.Parent = char
+				end
+			end
+		end
+	end
 end)
 
 updateButton()
 
-print("⚙️ USE TOOLS — Engine Overdrive Activated")
+print("⚙️ USE TOOLS — Engine Overdrive Ultimate Edition Initialized")
