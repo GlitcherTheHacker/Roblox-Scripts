@@ -1,4 +1,4 @@
--- ⚡ USE TOOLS vX+ — ULTRA OVERDRIVE ⚡
+-- ⚡ USE TOOLS — ULTRA OVERDRIVE ⚡
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -18,11 +18,11 @@ local toggle = Instance.new("TextButton")
 toggle.Size = UDim2.new(0, 120, 0, 50)
 toggle.AnchorPoint = Vector2.new(1, 0.5)
 toggle.Position = UDim2.new(1, -20, 0.5, 0)
-toggle.BackgroundColor3 = Color3.fromRGB(0,0,0)
+toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 toggle.Font = Enum.Font.GothamBlack
 toggle.Text = "OFF"
 toggle.TextSize = 22
-toggle.TextColor3 = Color3.fromRGB(255,255,255)
+toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggle.BorderSizePixel = 0
 toggle.AutoButtonColor = false
 toggle.Active = true
@@ -33,100 +33,100 @@ local corner = Instance.new("UICorner", toggle)
 corner.CornerRadius = UDim.new(0.3, 0)
 
 local shadow = Instance.new("Frame")
-shadow.Size = toggle.Size + UDim2.new(0,6,0,6)
+shadow.Size = toggle.Size + UDim2.new(0, 6, 0, 6)
 shadow.AnchorPoint = toggle.AnchorPoint
-shadow.Position = toggle.Position + UDim2.new(0,3,0,3)
-shadow.BackgroundColor3 = Color3.fromRGB(25,25,25)
+shadow.Position = toggle.Position + UDim2.new(0, 3, 0, 3)
+shadow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 shadow.BackgroundTransparency = 0.65
 shadow.ZIndex = toggle.ZIndex - 1
 shadow.Parent = gui
 
 toggle:GetPropertyChangedSignal("Position"):Connect(function()
-    shadow.Position = toggle.Position + UDim2.new(0,3,0,3)
+	shadow.Position = toggle.Position + UDim2.new(0, 3, 0, 3)
 end)
 
 -- State
 local active = false
-local MAX_THREAD_SPAWNS = 64
-local spawnCount = 0
-local loopActive = false -- prevents multiple loops per character
+local loopRunning = false
 
 local function updateButton()
-    if active then
-        toggle.Text = "ON"
-        toggle.BackgroundColor3 = Color3.fromRGB(255,255,255)
-        toggle.TextColor3 = Color3.fromRGB(0,0,0)
-    else
-        toggle.Text = "OFF"
-        toggle.BackgroundColor3 = Color3.fromRGB(0,0,0)
-        toggle.TextColor3 = Color3.fromRGB(255,255,255)
-    end
+	if active then
+		toggle.Text = "ON"
+		toggle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		toggle.TextColor3 = Color3.fromRGB(0, 0, 0)
+	else
+		toggle.Text = "OFF"
+		toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+	end
 end
 
 -- Tool Handling
 local function equipAllTools()
-    local char = player.Character
-    if not char then return end
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then
-        for _, tool in ipairs(backpack:GetChildren()) do
-            if tool:IsA("Tool") then tool.Parent = char end
-        end
-    end
+	local char = player.Character
+	if not char then return end
+	local backpack = player:FindFirstChild("Backpack")
+	if backpack then
+		for _, tool in ipairs(backpack:GetChildren()) do
+			if tool:IsA("Tool") then
+				tool.Parent = char
+			end
+		end
+	end
 end
 
-local function unequipAllTools()
-    local char = player.Character
-    if not char then return end
-    for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") then tool.Parent = player.Backpack end
-    end
+-- Fast Loop (constant)
+local function toolLoop()
+	if loopRunning then return end
+	loopRunning = true
+	task.spawn(function()
+		while true do
+			if active then
+				local char = player.Character
+				if char then
+					equipAllTools()
+					for _, tool in ipairs(char:GetChildren()) do
+						if tool:IsA("Tool") then
+							pcall(function()
+								tool:Activate()
+							end)
+						end
+					end
+				end
+			end
+			-- Fastest reliable tick (PostSimulation is ideal)
+			PostSim:Wait()
+		end
+	end)
 end
 
--- Tool Loop
-local function startToolLoop(char)
-    if loopActive then return end
-    loopActive = true
-    task.spawn(function()
-        while active and player.Character == char do
-            equipAllTools()
-            for _, tool in ipairs(char:GetChildren()) do
-                if tool:IsA("Tool") and spawnCount < MAX_THREAD_SPAWNS then
-                    spawnCount += 1
-                    task.spawn(function()
-                        pcall(function()
-                            tool:Activate()
-                        end)
-                        spawnCount -= 1
-                    end)
-                end
-            end
-            PostSim:Wait()
-        end
-        loopActive = false
-    end)
-end
-
--- Toggle
+-- Toggle Function
 local function toggleState()
-    active = not active
-    updateButton()
-    if active then
-        if player.Character then
-            startToolLoop(player.Character)
-        end
-    else
-        unequipAllTools()
-    end
+	active = not active
+	updateButton()
+	if active and not loopRunning then
+		toolLoop()
+	end
 end
 
+-- Input + Button Events
 toggle.MouseButton1Click:Connect(toggleState)
 UIS.InputBegan:Connect(function(input, gp)
-    if not gp and input.KeyCode == Enum.KeyCode.Q then
-        toggleState()
-    end
+	if not gp and input.KeyCode == Enum.KeyCode.Q then
+		toggleState()
+	end
 end)
 
-updateButton()
+-- Character Respawn Handling (persistent state)
+player.CharacterAdded:Connect(function(char)
+	char:WaitForChild("HumanoidRootPart", 3)
+	if active then
+		task.wait(0.1)
+		equipAllTools()
+	end
+end)
 
-print("⚙️ USE TOOLS — ULTRA OVERDRIVE INITILIZED")
+-- Initialize
+updateButton()
+toolLoop()
+print("⚙️ USE TOOLS — ULTRA OVERDRIVE Initialized")
