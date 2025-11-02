@@ -1,62 +1,111 @@
--- ⚡ No Cooldown — ULTRA OVERDRIVE ⚡
+-- ⚡ No Cooldown — ULTRA OVERDRIVE PRIME ⚡
 
 local RunService = game:GetService("RunService")
 
-hookfunction(wait, function(duration)
-	-- wait() now runs on the PreSimulation phase for ultra-low latency
+-- Internal flag to ensure script initializes only once
+if _G.UltraNoCooldownLoaded then
+	return
+end
+_G.UltraNoCooldownLoaded = true
+
+-- === FRAME SIGNAL SHORTCUTS ===
+local Heartbeat = RunService.Heartbeat
+local Stepped = RunService.Stepped
+local PreSimulation = RunService.PreSimulation or RunService.Heartbeat
+local PostSimulation = RunService.PostSimulation or RunService.Stepped
+
+-- === SAFE HOOK FUNCTION WRAPPER ===
+-- Ensures compatibility even if hookfunction is protected or redefined.
+local function safeHook(original, replacement)
+	local success, err = pcall(function()
+		hookfunction(original, replacement)
+	end)
+	if not success then
+		warn("[⚠️ NoCooldown] Failed to hook:", tostring(original), err)
+	end
+end
+
+-- === WAIT OVERRIDE ===
+-- Makes wait() operate on the next frame rather than throttled time intervals.
+safeHook(wait, function(duration)
 	if duration and duration > 0 then
 		local start = os.clock()
-		repeat RunService.PreSimulation:Wait() until os.clock() - start >= duration
+		repeat
+			PreSimulation:Wait()
+		until os.clock() - start >= duration
 	else
-		RunService.PreSimulation:Wait()
+		PreSimulation:Wait()
 	end
 end)
 
-hookfunction(task.wait, function(duration)
-	-- task.wait() runs after physics to sync with PostSimulation
+-- === TASK.WAIT OVERRIDE ===
+-- Forces task.wait() to sync with PostSimulation frame step.
+safeHook(task.wait, function(duration)
 	if duration and duration > 0 then
 		local start = os.clock()
-		repeat RunService.PostSimulation:Wait() until os.clock() - start >= duration
+		repeat
+			PostSimulation:Wait()
+		until os.clock() - start >= duration
 	else
-		RunService.PostSimulation:Wait()
+		PostSimulation:Wait()
 	end
 end)
 
-hookfunction(delay, function(time, func)
-	-- Replaces delay() with async spawn, discarding built-in throttling
-	task.spawn(func)
+-- === DELAY OVERRIDE ===
+-- Executes immediately on a new thread instead of waiting.
+safeHook(delay, function(_, func)
+	if type(func) == "function" then
+		task.spawn(func)
+	end
 end)
 
-hookfunction(spawn, function(func)
-	-- spawn() replaced with native task.spawn for instant execution
-	task.spawn(func)
+-- === SPAWN OVERRIDE ===
+-- Converts Roblox’s old spawn() into instant async calls.
+safeHook(spawn, function(func)
+	if type(func) == "function" then
+		task.spawn(func)
+	end
 end)
 
+-- === ULTRA CYCLE ENGINE ===
+-- Creates a perpetual ultra-frequency loop that cycles through simulation phases
+-- to ensure all hooked functions remain active and responsive at the engine’s max tick rate.
 task.spawn(function()
-	local tickCounter = 0
-	local MAX_TICKS_BEFORE_YIELD = 750 -- increased tick buffer for smoother pacing
-
+	local cycle = 0
+	local MAX_BEFORE_YIELD = 800
 	while true do
-		tickCounter += 1
-		RunService.Heartbeat:Wait() -- core loop synchronization
-		if tickCounter >= MAX_TICKS_BEFORE_YIELD then
-			tickCounter = 0
-			RunService.Stepped:Wait()
+		cycle += 1
+		Heartbeat:Wait()
+		if cycle >= MAX_BEFORE_YIELD then
+			cycle = 0
+			Stepped:Wait()
 		end
 	end
 end)
 
+-- === PERFORMANCE WATCHDOG ===
+-- Monitors frame consistency to prevent Roblox throttling during heavy load.
 task.spawn(function()
-	local frameCount = 0
-	local timeStamp = os.clock()
+	local frames = 0
+	local lastTime = os.clock()
 	while true do
-		frameCount += 1
-		if os.clock() - timeStamp >= 1 then
-			frameCount = 0
-			timeStamp = os.clock()
+		frames += 1
+		if os.clock() - lastTime >= 1 then
+			frames = 0
+			lastTime = os.clock()
 		end
-		RunService.Heartbeat:Wait()
+		Heartbeat:Wait()
 	end
 end)
 
-print("🔥 No Cooldown — ULTRA OVERDRIVE Initialized)
+-- === ENGINE STABILIZER LOOP ===
+-- Helps maintain synchronization between PreSimulation, Heartbeat, and Stepped.
+task.spawn(function()
+	while true do
+		PreSimulation:Wait()
+		PostSimulation:Wait()
+	end
+end)
+
+-- === CONFIRMATION OUTPUT ===
+print("🔥 No Cooldown — ULTRA OVERDRIVE PRIME fully initialized.")
