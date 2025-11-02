@@ -1,36 +1,62 @@
 -- ⚡ No Cooldown — ULTRA OVERDRIVE ⚡
+
 local RunService = game:GetService("RunService")
 
--- Hook core yields for max speed
-hookfunction(wait, function() return RunService.PreAnimation:Wait() or RunService.Stepped:Wait() end)
-hookfunction(task.wait, function() return RunService.PostSimulation:Wait() end)
-hookfunction(delay, function(_,func) task.spawn(func) end)
-hookfunction(spawn, function(func) task.spawn(func) end)
-
--- Ultra tick engine loop
-task.spawn(function()
-    local tickCounter = 0
-    local MAX_TICKS_BEFORE_YIELD = 500
-    while true do
-        tickCounter += 1
-        RunService.Heartbeat:Wait()
-        if tickCounter >= MAX_TICKS_BEFORE_YIELD then
-            tickCounter = 0
-            RunService.Stepped:Wait()
-        end
-    end
+hookfunction(wait, function(duration)
+	-- wait() now runs on the PreSimulation phase for ultra-low latency
+	if duration and duration > 0 then
+		local start = os.clock()
+		repeat RunService.PreSimulation:Wait() until os.clock() - start >= duration
+	else
+		RunService.PreSimulation:Wait()
+	end
 end)
 
--- Optional: performance monitor
-task.spawn(function()
-    local frameCount, timeStamp = 0, os.clock()
-    while true do
-        frameCount += 1
-        if os.clock() - timeStamp >= 1 then
-            frameCount, timeStamp = 0, os.clock()
-        end
-        RunService.Heartbeat:Wait()
-    end
+hookfunction(task.wait, function(duration)
+	-- task.wait() runs after physics to sync with PostSimulation
+	if duration and duration > 0 then
+		local start = os.clock()
+		repeat RunService.PostSimulation:Wait() until os.clock() - start >= duration
+	else
+		RunService.PostSimulation:Wait()
+	end
 end)
 
-print("🔥 No Cooldown — ULTRA OVERDRIVE initialized")
+hookfunction(delay, function(time, func)
+	-- Replaces delay() with async spawn, discarding built-in throttling
+	task.spawn(func)
+end)
+
+hookfunction(spawn, function(func)
+	-- spawn() replaced with native task.spawn for instant execution
+	task.spawn(func)
+end)
+
+task.spawn(function()
+	local tickCounter = 0
+	local MAX_TICKS_BEFORE_YIELD = 750 -- increased tick buffer for smoother pacing
+
+	while true do
+		tickCounter += 1
+		RunService.Heartbeat:Wait() -- core loop synchronization
+		if tickCounter >= MAX_TICKS_BEFORE_YIELD then
+			tickCounter = 0
+			RunService.Stepped:Wait()
+		end
+	end
+end)
+
+task.spawn(function()
+	local frameCount = 0
+	local timeStamp = os.clock()
+	while true do
+		frameCount += 1
+		if os.clock() - timeStamp >= 1 then
+			frameCount = 0
+			timeStamp = os.clock()
+		end
+		RunService.Heartbeat:Wait()
+	end
+end)
+
+print("🔥 No Cooldown — ULTRA OVERDRIVE Initialized
