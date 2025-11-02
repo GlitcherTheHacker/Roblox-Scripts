@@ -59,4 +59,4 @@ task.spawn(function()
 	end
 end)
 
-print("🔥 No Cooldown — ULTRA OVERDRIVE Initialized
+print("🔥 No Cooldown — ULTRA OVERDRIVE Initialized)
