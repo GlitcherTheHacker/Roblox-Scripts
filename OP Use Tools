@@ -1,174 +1,132 @@
--- ⚡ USE TOOLS vX — ENGINE OVERDRIVE EDITION ⚡
+-- ⚡ USE TOOLS vX+ — ULTRA OVERDRIVE ⚡
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
+
 local player = Players.LocalPlayer
-
--- === ENGINE THREADS ===
-local PreAnim = RunService.PreAnimation
 local PostSim = RunService.PostSimulation
-local Heartbeat = RunService.Heartbeat
-local Stepped = RunService.Stepped
 
--- === GUI SETUP ===
+-- GUI Setup
 local gui = Instance.new("ScreenGui")
 gui.Name = "UltraUseTools"
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 gui.Parent = game:GetService("CoreGui")
 
 local toggle = Instance.new("TextButton")
 toggle.Size = UDim2.new(0, 120, 0, 50)
 toggle.AnchorPoint = Vector2.new(1, 0.5)
-toggle.Position = UDim2.new(1, -20, 0.5, 0) -- perfectly centered right-side for PC and mobile
-toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+toggle.Position = UDim2.new(1, -20, 0.5, 0)
+toggle.BackgroundColor3 = Color3.fromRGB(0,0,0)
 toggle.Font = Enum.Font.GothamBlack
 toggle.Text = "OFF"
 toggle.TextSize = 22
-toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggle.TextColor3 = Color3.fromRGB(255,255,255)
 toggle.BorderSizePixel = 0
 toggle.AutoButtonColor = false
 toggle.Active = true
 toggle.Draggable = true
 toggle.Parent = gui
 
-local corner = Instance.new("UICorner")
+local corner = Instance.new("UICorner", toggle)
 corner.CornerRadius = UDim.new(0.3, 0)
-corner.Parent = toggle
 
--- Soft drop shadow for visibility on all backgrounds
 local shadow = Instance.new("Frame")
-shadow.Size = toggle.Size + UDim2.new(0, 6, 0, 6)
+shadow.Size = toggle.Size + UDim2.new(0,6,0,6)
 shadow.AnchorPoint = toggle.AnchorPoint
-shadow.Position = toggle.Position + UDim2.new(0, 3, 0, 3)
-shadow.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-shadow.BackgroundTransparency = 0.6
+shadow.Position = toggle.Position + UDim2.new(0,3,0,3)
+shadow.BackgroundColor3 = Color3.fromRGB(25,25,25)
+shadow.BackgroundTransparency = 0.65
 shadow.ZIndex = toggle.ZIndex - 1
 shadow.Parent = gui
 
 toggle:GetPropertyChangedSignal("Position"):Connect(function()
-	shadow.Position = toggle.Position + UDim2.new(0, 3, 0, 3)
+    shadow.Position = toggle.Position + UDim2.new(0,3,0,3)
 end)
 
--- === INTERNAL STATE ===
+-- State
 local active = false
-local lastActivation = os.clock()
-local debounceTime = 0.0001 -- **EXTREME precision** (0.1ms cycle window)
-local autoResume = false
+local MAX_THREAD_SPAWNS = 64
+local spawnCount = 0
+local loopActive = false -- prevents multiple loops per character
 
--- === UI REFRESH ===
 local function updateButton()
-	if active then
-		toggle.Text = "ON"
-		toggle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		toggle.TextColor3 = Color3.fromRGB(0, 0, 0)
-	else
-		toggle.Text = "OFF"
-		toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-		toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-	end
+    if active then
+        toggle.Text = "ON"
+        toggle.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        toggle.TextColor3 = Color3.fromRGB(0,0,0)
+    else
+        toggle.Text = "OFF"
+        toggle.BackgroundColor3 = Color3.fromRGB(0,0,0)
+        toggle.TextColor3 = Color3.fromRGB(255,255,255)
+    end
 end
 
--- === SAFE UNEQUIP FUNCTION ===
-local function unequipAll()
-	local char = player.Character
-	if not char then return end
-	for _, tool in ipairs(char:GetChildren()) do
-		if tool:IsA("Tool") then
-			tool.Parent = player.Backpack
-		end
-	end
+-- Tool Handling
+local function equipAllTools()
+    local char = player.Character
+    if not char then return end
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") then tool.Parent = char end
+        end
+    end
 end
 
--- === TOGGLE FUNCTIONALITY ===
+local function unequipAllTools()
+    local char = player.Character
+    if not char then return end
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") then tool.Parent = player.Backpack end
+    end
+end
+
+-- Tool Loop
+local function startToolLoop(char)
+    if loopActive then return end
+    loopActive = true
+    task.spawn(function()
+        while active and player.Character == char do
+            equipAllTools()
+            for _, tool in ipairs(char:GetChildren()) do
+                if tool:IsA("Tool") and spawnCount < MAX_THREAD_SPAWNS then
+                    spawnCount += 1
+                    task.spawn(function()
+                        pcall(function()
+                            tool:Activate()
+                        end)
+                        spawnCount -= 1
+                    end)
+                end
+            end
+            PostSim:Wait()
+        end
+        loopActive = false
+    end)
+end
+
+-- Toggle
 local function toggleState()
-	active = not active
-	updateButton()
-	if active then
-		autoResume = true
-	else
-		autoResume = false
-		unequipAll()
-	end
+    active = not active
+    updateButton()
+    if active then
+        if player.Character then
+            startToolLoop(player.Character)
+        end
+    else
+        unequipAllTools()
+    end
 end
 
 toggle.MouseButton1Click:Connect(toggleState)
 UIS.InputBegan:Connect(function(input, gp)
-	if not gp and input.KeyCode == Enum.KeyCode.Q then
-		toggleState()
-	end
-end)
-
--- === TOOL EQUIP & ACTIVATION CORE ===
--- This section operates at a micro-tick speed using all engine timing layers in harmony
-task.spawn(function()
-	while true do
-		if active then
-			local now = os.clock()
-			if now - lastActivation >= debounceTime then
-				lastActivation = now
-
-				local char = player.Character
-				if char then
-					local backpack = player:FindFirstChild("Backpack")
-
-					-- ⚡ Instant equip — zero frame delay
-					if backpack then
-						for _, tool in ipairs(backpack:GetChildren()) do
-							if tool:IsA("Tool") then
-								tool.Parent = char
-							end
-						end
-					end
-
-					-- ⚡ Multi-threaded activation — every tool gets its own task
-					for _, tool in ipairs(char:GetChildren()) do
-						if tool:IsA("Tool") then
-							task.spawn(function()
-								pcall(function()
-									tool:Activate()
-									-- Redundant micro-activation for layered tools
-									task.defer(function()
-										pcall(function()
-											tool:Activate()
-										end)
-									end)
-								end)
-							end)
-						end
-					end
-				end
-			end
-		end
-
-		-- Sub-frame synchronization — runs between physics and animation cycles
-		PreAnim:Wait()
-		PostSim:Wait()
-	end
-end)
-
--- === AUTO-RESPAWN REACTIVATION ===
-player.CharacterAdded:Connect(function(char)
-	task.defer(function()
-		char:WaitForChild("Humanoid", 3)
-		task.wait(0.25) -- minimal delay to allow tool replication
-		if autoResume then
-			active = true
-			updateButton()
-			-- Instant equip when respawned
-			local backpack = player:FindFirstChild("Backpack")
-			if backpack then
-				for _, tool in ipairs(backpack:GetChildren()) do
-					if tool:IsA("Tool") then
-						tool.Parent = char
-					end
-				end
-			end
-		end
-	end)
+    if not gp and input.KeyCode == Enum.KeyCode.Q then
+        toggleState()
+    end
 end)
 
 updateButton()
 
-print("⚙️ USE TOOLS — Engine Overdrive Infinity Edition initialized")
+print("⚙️ USE TOOLS — ULTRA OVERDRIVE INITILIZED")
