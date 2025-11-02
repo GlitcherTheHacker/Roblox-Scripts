@@ -109,4 +109,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
-print("💠 ULTRA-INSTANT GUIDE RESPAWN — Keybind Edition Initialized. "Press [" .. TOGGLE_KEY.Name .. "] to toggle Auto-Respawn")
+print("💠 ULTRA-INSTANT GUIDE RESPAWN — Keybind Edition Initialized. Press [' .. TOGGLE_KEY.Name .. '] to toggle Auto-Respawn")
