@@ -621,7 +621,10 @@ updatesLabel.Text = [[
 📝 Updates: 
 11/8/25
 - Finally made the secret tab within the hub show up, only extremely trusted people will be given this tab of scripts.
-- Updated all of the scripts
+- Added a new thing to loopbring, now has an escape cuntion, use it to try and escape your enemy grasp.
+- Added an on screen toggle button for mobile players
+- Added an Attacker Tracker - It will show you on screen, whos attacking you, and how many people are attacking you.
+- Updated other scripts
 - Hub redesign coming soon...
 
 10/30/25
@@ -661,6 +664,7 @@ if isVerified(LocalPlayer.UserId) then
         {"Perma Death", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/PermaDeath"},
         {"Float + Reach", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Float%20%2B%20Reach"},
         {"Temp Lag", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Escape"},
+        {"Attacker Tracker", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Attacker%20Tracker"},
     }
     for i, t in ipairs(secrets) do
         local row = createActionButton(t[1], t[2])
