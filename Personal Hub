@@ -11,6 +11,7 @@ local CoreGui = game:GetService("CoreGui")
 -- ======= Verification System =======
 local VERIFIED_USERS = {
     2522193455, -- Hub Creator
+    4449347130, -- Alt
     9890178963, -- Eggy (Best Friend)
 }
 
@@ -911,7 +912,10 @@ end)
 -- ======= Sidebar buttons build =======
 local btnWelcome = createSidebarButton("Welcome", 1)
 local btnUpdates = createSidebarButton("Updates", 2); btnUpdates.SetAccent(true)
-local btnSecret = createSidebarButton("Secret Scripts", 3)
+-- 🔒 Verified Page Button (only visible to whitelisted users)
+if isVerified(LocalPlayer.UserId) then
+    local btnSecret = createSidebarButton("Secret Scripts", 3)
+end
 local btnTools = createSidebarButton("Tool Scripts", 4)
 local btnPlayer = createSidebarButton("Player Scripts", 5)
 local btnOther = createSidebarButton("Other Scripts", 6)
