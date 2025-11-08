@@ -1,11 +1,12 @@
 -- CONFIG
-local auraRange = 20 -- Max distance to enemy
-local auraSize = Vector3.new(30, 30, 30) -- Aura box around tool
-local attackRate = 0.1 -- Speed of the loop (seconds)
+local auraRange = 20
+local auraSize = Vector3.new(30, 30, 30)
+local attackRate = 0.1
 
 -- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 -- STATE
@@ -13,78 +14,84 @@ local running = true
 local auraParams = OverlapParams.new()
 auraParams.FilterType = Enum.RaycastFilterType.Include
 
--- HELPERS
+local mouseDown = false
+
+UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        mouseDown = true
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        mouseDown = false
+    end
+end)
+
 local function getChar(plr)
-    return plr and plr.Character
+    return plr.Character
 end
 
 local function getHRP(plr)
-    local char = getChar(plr)
-    return char and char:FindFirstChild("HumanoidRootPart")
+    local c = getChar(plr)
+    return c and c:FindFirstChild("HumanoidRootPart")
 end
 
-local function getValidTargets()
+local function getTargets()
     local myHRP = getHRP(LocalPlayer)
     if not myHRP then return {}, {} end
 
-    local playersInRange = {}
-    local chars = {}
+    local plrs, chars = {}, {}
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local hrp = getHRP(player)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            local hrp = getHRP(p)
             if hrp and (hrp.Position - myHRP.Position).Magnitude <= auraRange then
-                table.insert(playersInRange, player)
-                local char = getChar(player)
-                if char then table.insert(chars, char) end
+                table.insert(plrs, p)
+                table.insert(chars, getChar(p))
             end
         end
     end
 
-    return playersInRange, chars
+    return plrs, chars
 end
 
 local function getTouchPart(tool)
-    local touchTransmitter = tool and tool:FindFirstChildWhichIsA("TouchTransmitter", true)
-    return touchTransmitter and touchTransmitter.Parent
-end
-
-local function autoEquip(tool)
-    if not tool:IsDescendantOf(workspace) then
-        tool.Parent = getChar(LocalPlayer)
-    end
-    tool:Activate()
+    local tx = tool:FindFirstChildWhichIsA("TouchTransmitter", true)
+    return tx and tx.Parent
 end
 
 -- MAIN LOOP
 task.spawn(function()
     while running do
-        local myChar = getChar(LocalPlayer)
-        if not myChar then task.wait(1) continue end
+        local char = getChar(LocalPlayer)
+        if not char then task.wait(1) continue end
 
-        local targets, enemyChars = getValidTargets()
+        local targets, enemyChars = getTargets()
         auraParams.FilterDescendantsInstances = enemyChars
 
-        for _, tool in ipairs(myChar:GetChildren()) do
+        for _, tool in ipairs(char:GetChildren()) do
             if tool:IsA("Tool") then
                 local fightEvent = tool:FindFirstChild("FightEvent")
                 local touchPart = getTouchPart(tool)
 
-                if fightEvent then
-                    autoEquip(tool)
-                    fightEvent:FireServer() -- One powerful hit per scan
+                -- ONLY ATTACK WHEN YOU HOLD MOUSE BUTTON
+                if mouseDown and fightEvent then
+                    fightEvent:FireServer()
+                    tool:Activate()
                 end
 
+                -- ALWAYS DO AURA HITBOX (but not forced attack)
                 if touchPart then
-                    local partsInBox = workspace:GetPartBoundsInBox(
+                    local parts = workspace:GetPartBoundsInBox(
                         touchPart.CFrame,
                         touchPart.Size + auraSize,
                         auraParams
                     )
-
-                    for _, part in ipairs(partsInBox) do
-                        local model = part:FindFirstAncestorWhichIsA("Model")
-                        if model and table.find(enemyChars, model) then
+                    for _, part in ipairs(parts) do
+                        local mdl = part:FindFirstAncestorWhichIsA("Model")
+                        if mdl and table.find(enemyChars, mdl) then
                             firetouchinterest(touchPart, part, 1)
                             firetouchinterest(touchPart, part, 0)
                         end
@@ -97,10 +104,9 @@ task.spawn(function()
     end
 end)
 
--- RESET ON DEATH
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
     running = true
 end)
 
-print("Super Death Aura Activated!")
+print("Aura Active - Manual Attack Control Enabled")
