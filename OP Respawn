@@ -1,4 +1,4 @@
--- ⚡ ULTRA-INSTANT RESPAWN
+-- ⚡ ULTRA-INSTANT RESPAWN + GUI TOGGLE SUPPORT (PC + MOBILE)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,104 +9,116 @@ local LocalPlayer = Players.LocalPlayer
 local GuideEvent = ReplicatedStorage:FindFirstChild("Guide")
 
 -- === SETTINGS ===
-local TOGGLE_KEY = Enum.KeyCode.R -- Press this to toggle auto-respawn
+local TOGGLE_KEY = Enum.KeyCode.R -- PC/Keyboard keybind
 
--- === GLOBAL CONTROL ===
+-- === GLOBAL STATE ===
 _G.UltraRespawn = _G.UltraRespawn or { Active = false, Connections = {} }
 
+---------------------------------------------------------------------
+-- UI CREATION
+---------------------------------------------------------------------
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "UltraRespawnGUI"
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 160, 0, 45)
+toggleButton.Position = UDim2.new(0.5, -80, 0.85, 0) -- Center bottom
+toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextSize = 18
+toggleButton.Text = "Respawn: OFF"
+toggleButton.Parent = screenGui
+
+local function updateButtonVisual()
+	if _G.UltraRespawn.Active then
+		toggleButton.Text = "Respawn: ON"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+	else
+		toggleButton.Text = "Respawn: OFF"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+	end
+end
+
+---------------------------------------------------------------------
+-- HELPERS
+---------------------------------------------------------------------
 local function disconnectAll()
 	for _, conn in ipairs(_G.UltraRespawn.Connections) do
-		if conn and conn.Connected then
-			conn:Disconnect()
-		end
+		if conn and conn.Connected then conn:Disconnect() end
 	end
 	table.clear(_G.UltraRespawn.Connections)
 end
 
 local function fireGuideOnce()
 	if GuideEvent then
-		pcall(function()
-			GuideEvent:FireServer()
-		end)
+		pcall(function() GuideEvent:FireServer() end)
 	else
-		pcall(function()
-			LocalPlayer:LoadCharacter()
-		end)
+		pcall(function() LocalPlayer:LoadCharacter() end)
 	end
 end
 
--- === Hook Character ===
 local function hookCharacter(char)
 	local humanoid = char:WaitForChild("Humanoid", 1)
 	if not humanoid then return end
 
-	local respawned = false
-	local function tryRespawn(trigger)
-		if not _G.UltraRespawn.Active or respawned then return end
-		respawned = true
+	local triggered = false
+	local function triggerRespawn()
+		if not _G.UltraRespawn.Active or triggered then return end
+		triggered = true
 		task.defer(fireGuideOnce)
 	end
 
-	local diedConn = humanoid.Died:Connect(function()
-		tryRespawn("HumanoidDied")
-	end)
+	table.insert(_G.UltraRespawn.Connections, humanoid.Died:Connect(triggerRespawn))
+	table.insert(_G.UltraRespawn.Connections, humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+		if humanoid.Health <= 0 then triggerRespawn() end
+	end))
 
-	local healthConn = humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-		if humanoid.Health <= 0 then
-			tryRespawn("HealthZero")
-		end
-	end)
-
-	local ancestryConn = char.AncestryChanged:Connect(function(_, parent)
-		if not parent then
-			tryRespawn("ModelRemoved")
-		end
-	end)
+	table.insert(_G.UltraRespawn.Connections, char.AncestryChanged:Connect(function(_, parent)
+		if not parent then triggerRespawn() end
+	end))
 
 	local hbConn
 	hbConn = RunService.Heartbeat:Connect(function()
 		if not char.Parent or humanoid.Health <= 0 then
 			if hbConn then hbConn:Disconnect() end
-			tryRespawn("HeartbeatFailSafe")
+			triggerRespawn()
 		end
 	end)
-
-	table.insert(_G.UltraRespawn.Connections, diedConn)
-	table.insert(_G.UltraRespawn.Connections, healthConn)
-	table.insert(_G.UltraRespawn.Connections, ancestryConn)
 	table.insert(_G.UltraRespawn.Connections, hbConn)
 end
 
--- === Character Added ===
-local function onCharacterAdded(char)
-	task.defer(function()
-		hookCharacter(char)
-	end)
-end
-
--- === Enable/Disable Logic ===
-local function toggleRespawn()
-	_G.UltraRespawn.Active = not _G.UltraRespawn.Active
+local function enableRespawn()
+	_G.UltraRespawn.Active = true
 	disconnectAll()
-
-	if _G.UltraRespawn.Active then
-		print("💠 [Auto-Respawn ENABLED]")
-		table.insert(_G.UltraRespawn.Connections,
-			Players.LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
-		)
-		if LocalPlayer.Character then
-			onCharacterAdded(LocalPlayer.Character)
-		end
-	else
-		print("💠 [Auto-Respawn DISABLED]")
-	end
+	table.insert(_G.UltraRespawn.Connections, LocalPlayer.CharacterAdded:Connect(hookCharacter))
+	if LocalPlayer.Character then hookCharacter(LocalPlayer.Character) end
+	updateButtonVisual()
 end
 
--- === Keybind ===
+local function disableRespawn()
+	_G.UltraRespawn.Active = false
+	disconnectAll()
+	updateButtonVisual()
+end
+
+local function toggleRespawn()
+	if _G.UltraRespawn.Active then disableRespawn() else enableRespawn() end
+end
+
+---------------------------------------------------------------------
+-- INPUT HANDLERS (KEYBOARD + MOBILE BUTTON)
+---------------------------------------------------------------------
 UIS.InputBegan:Connect(function(input, gameProcessed)
-	if not gameProcessed and input.KeyCode == TOGGLE_KEY then
+	if gameProcessed then return end
+	if input.KeyCode == TOGGLE_KEY then
 		toggleRespawn()
 	end
 end)
 
-print("💠 ULTRA-INSTANT GUIDE RESPAWN — Keybind Edition Initialized. Press [' .. TOGGLE_KEY.Name .. '] to toggle Auto-Respawn")
+toggleButton.MouseButton1Click:Connect(toggleRespawn)
+
+---------------------------------------------------------------------
+print("💠 ULTRA-INSTANT RESPAWN INITIALIZED — Press [" .. TOGGLE_KEY.Name .. "] or tap the button.")
+updateButtonVisual()
