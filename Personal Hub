@@ -11,6 +11,7 @@ local CoreGui = game:GetService("CoreGui")
 -- ======= Verification System =======
 local VERIFIED_USERS = {
     2522193455, -- Hub Creator
+    9890178963, -- Eggy (Best Friend)
 }
 
 local function isVerified(userId)
@@ -206,7 +207,7 @@ subtitle.Name = "Subtitle"
 subtitle.Size = UDim2.new(0, 520, 1, 0)
 subtitle.Position = UDim2.new(0, 18, 0, 28)
 subtitle.BackgroundTransparency = 1
-subtitle.Text = "Ultra Hub, Most powerful version so far."
+subtitle.Text = "01_ii SPT Hub — built from scratch. Use the sidebar to open pages."
 subtitle.Font = Enum.Font.Gotham
 subtitle.TextSize = 13
 subtitle.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
@@ -617,16 +618,13 @@ updatesLabel.Position = UDim2.new(0, 5, 0, 0)
 updatesLabel.BackgroundTransparency = 1
 updatesLabel.Text = [[
 📝 Updates: 
+11/8/25
+- Finally made the secret tab within the hub show up, only extremely trusted people will be given this tab of scripts.
+- Updated all of the scripts
+- Hub redesign coming soon...
+
 10/30/25
 - Updated all scripts, faster, stronger, ultra enhanced proficiency.
-
-10/28/25:
-- No Cooldown Update - Speed at its THEORETICAL maximum, that meaning it cannot possibly get any faster then this unless you go to extents that would entirely break your game. you should be very OP with this now.
-
-- Loopbring Update - People looped no longer have their tools shown when you loop them. this is to help prevent damage on your own charcter, plus help reduce lag.
-
-10/27/25:
-- New form of Aura (thanks ghostly) This is loopbring but on a whole-nother level. basically, you select somoenes user, and they get an aura around them,a nd all your hits land on then, just like loop, but without the loop. this is actually better then using loop because loop slows down a lot of things and can cause you to die quicker, so using this is much prefered. 
 ]]
 updatesLabel.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 updatesLabel.TextWrapped = true
@@ -658,7 +656,10 @@ if isVerified(LocalPlayer.UserId) then
     toolsHeader.Parent = secretPage
 
     local secrets = {
-    {"God Cooldown", "..."}
+        {"Gnd Hub", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/GND%20HUb"},
+        {"Perma Death", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/PermaDeath"},
+        {"Float + Reach", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Float%20%2B%20Reach"},
+        {"Temp Lag", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Escape"},
     }
     for i, t in ipairs(secrets) do
         local row = createActionButton(t[1], t[2])
@@ -684,7 +685,6 @@ local tools = {
     {"Use Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Use%20Tools"},
     {"OP No Cooldown", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20No%20Coooldown"},
     {"OP Insta-Kill", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Insta-Kill"},
-    {"Target Aura", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Target%20Aura"},
 }
 for i, t in ipairs(tools) do
     local row = createActionButton(t[1], t[2])
@@ -706,10 +706,11 @@ pHeader.Parent = playerPage
 
 local playerScripts = {
     {"OP Respawn", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Respawn"},
+    {"Target Aura", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Target%20Aura"},
     {"Loopbring", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Loopbring"},
     {"Damage", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Damage"},
     {"OP Anti-Lag", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Anti-Lag"},
-    {"Infinite Yield", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"}
+    {"Infinite Yield", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"},
 }
 for i,t in ipairs(playerScripts) do
     local row = createActionButton(t[1], t[2])
@@ -730,8 +731,7 @@ oHeader.Text = "Other Scripts"
 oHeader.Parent = otherPage
 
 local otherScripts = {
-    {"Escape", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Escape"},
-    {"Enemy Notifier", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Enemy%20Notifier"},
+    {"Axe Smash Spam", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Axe%20Smash%20Spam"},
 }
 for i,t in ipairs(otherScripts) do
     local row = createActionButton(t[1], t[2])
@@ -909,12 +909,13 @@ rejoinBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ======= Sidebar buttons build =======
-local btnWelcome = createSidebarButton("Welcome", 1); btnWelcome.SetAccent(true)
-local btnUpdates = createSidebarButton("Updates", 2)
-local btnTools = createSidebarButton("Tool Scripts", 3)
-local btnPlayer = createSidebarButton("Player Scripts", 4)
-local btnOther = createSidebarButton("Other Scripts", 5)
-local btnSettings = createSidebarButton("Settings", 6)
+local btnWelcome = createSidebarButton("Welcome", 1)
+local btnUpdates = createSidebarButton("Updates", 2); btnUpdates.SetAccent(true)
+local btnSecret = createSidebarButton("Secret Scripts", 3)
+local btnTools = createSidebarButton("Tool Scripts", 4)
+local btnPlayer = createSidebarButton("Player Scripts", 5)
+local btnOther = createSidebarButton("Other Scripts", 6)
+local btnSettings = createSidebarButton("Settings", 7)
 
 showPage("Updates")
 
