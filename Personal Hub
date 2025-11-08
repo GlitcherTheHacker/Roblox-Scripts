@@ -11,6 +11,7 @@ local CoreGui = game:GetService("CoreGui")
 -- ======= Verification System =======
 local VERIFIED_USERS = {
     2522193455, -- Hub Creator
+    4449347130, -- Alt
     9890178963, -- Eggy (Best Friend)
 }
 
