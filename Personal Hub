@@ -685,6 +685,7 @@ local tools = {
     {"Get Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Tool%20Grabber"},
     {"Use Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Use%20Tools"},
     {"OP No Cooldown", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20No%20Coooldown"},
+    {"Normla Kill Aura", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Death%20Aura.txt"},
     {"OP Insta-Kill", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Insta-Kill"},
 }
 for i, t in ipairs(tools) do
