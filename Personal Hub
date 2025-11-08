@@ -621,14 +621,17 @@ updatesLabel.Text = [[
 📝 Updates: 
 11/8/25
 - Finally made the secret tab within the hub show up, only extremely trusted people will be given this tab of scripts.
+
 - Added a new thing to loopbring, now has an escape cuntion, use it to try and escape your enemy grasp.
+
 - Added an on screen toggle button for mobile players
+
 - Added an Attacker Tracker - It will show you on screen, whos attacking you, and how many people are attacking you.
+
 - Updated other scripts
+
 - Hub redesign coming soon...
 
-10/30/25
-- Updated all scripts, faster, stronger, ultra enhanced proficiency.
 ]]
 updatesLabel.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 updatesLabel.TextWrapped = true
