@@ -12,6 +12,7 @@ local CoreGui = game:GetService("CoreGui")
 local VERIFIED_USERS = {
     2522193455, -- Hub Creator
     4449347130, -- Alt
+    9407037318, -- Messi
 }
 
 local function isVerified(userId)
