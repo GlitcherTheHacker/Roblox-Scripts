@@ -13,6 +13,7 @@ local VERIFIED_USERS = {
     2522193455, -- Hub Creator
     4449347130, -- Alt
     9407037318, -- Messi
+    1989950303, -- Lucky
 }
 
 local function isVerified(userId)
@@ -204,11 +205,11 @@ title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = header
 
 local subtitle = Instance.new("TextLabel")
-subtitle.Name = "Subtitle"
+subtitle.Name = "Made byy Dyllan/Drew"
 subtitle.Size = UDim2.new(0, 520, 1, 0)
 subtitle.Position = UDim2.new(0, 18, 0, 28)
 subtitle.BackgroundTransparency = 1
-subtitle.Text = "01_ii SPT Hub — built from scratch. Use the sidebar to open pages."
+subtitle.Text = "SPT Hub -  Second Stronget Hub After GND"
 subtitle.Font = Enum.Font.Gotham
 subtitle.TextSize = 13
 subtitle.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
