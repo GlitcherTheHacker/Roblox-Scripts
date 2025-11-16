@@ -1,4 +1,4 @@
--- ⚡ ULTRA-INSTANT RESPAWN + GUI TOGGLE SUPPORT (PC + MOBILE)
+-- ⚡ ULTRA-INSTANT RESPAWN + RAINBOW UI (PC + MOBILE)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,44 +9,73 @@ local LocalPlayer = Players.LocalPlayer
 local GuideEvent = ReplicatedStorage:FindFirstChild("Guide")
 
 -- === SETTINGS ===
-local TOGGLE_KEY = Enum.KeyCode.R -- PC/Keyboard keybind
+local TOGGLE_KEY = Enum.KeyCode.R
 
 -- === GLOBAL STATE ===
 _G.UltraRespawn = _G.UltraRespawn or { Active = false, Connections = {} }
 
 ---------------------------------------------------------------------
--- UI CREATION
+-- UI CREATION (RAINBOW THEME)
 ---------------------------------------------------------------------
--- Check if GUI already exists (prevents duplicates on respawn)
-local screenGui = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("UltraRespawnGUI")
+local screenGui = LocalPlayer.PlayerGui:FindFirstChild("UltraRespawnGUI")
 if not screenGui then
 	screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "UltraRespawnGUI"
-	screenGui.ResetOnSpawn = false -- crucial to persist across respawns
+	screenGui.ResetOnSpawn = false
+	screenGui.IgnoreGuiInset = false
 	screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 end
 
-local toggleButton = screenGui:FindFirstChild("ToggleButton")
-if not toggleButton then
-	toggleButton = Instance.new("TextButton")
-	toggleButton.Name = "ToggleButton"
-	toggleButton.Size = UDim2.new(0, 160, 0, 45)
-	toggleButton.Position = UDim2.new(0.5, -80, 0.85, 0)
-	toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-	toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-	toggleButton.Font = Enum.Font.GothamBold
-	toggleButton.TextSize = 18
-	toggleButton.Text = "Respawn: OFF"
-	toggleButton.Parent = screenGui
-end
+-- Remove old button if needed
+local old = screenGui:FindFirstChild("ToggleButton")
+if old then old:Destroy() end
 
+-- Container with rainbow border
+local frame = Instance.new("Frame")
+frame.Name = "RespawnFrame"
+frame.AnchorPoint = Vector2.new(0.5, 0.5)
+frame.Position = UDim2.new(0.5, 0, 0.85, 0)
+frame.Size = UDim2.new(0, 190, 0, 60)
+frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+frame.BorderSizePixel = 0
+frame.Parent = screenGui
+
+-- Rainbow border (UIStroke)
+local stroke = Instance.new("UIStroke")
+stroke.Thickness = 3
+stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+stroke.Parent = frame
+
+-- Rainbow animation
+task.spawn(function()
+	while true do
+		for i = 0, 1, 0.01 do
+			stroke.Color = Color3.fromHSV(i, 1, 1)
+			task.wait(0.03)
+		end
+	end
+end)
+
+-- Button inside the frame
+local toggleButton = Instance.new("TextButton")
+toggleButton.Name = "ToggleButton"
+toggleButton.Size = UDim2.new(1, -10, 1, -10)
+toggleButton.Position = UDim2.new(0, 5, 0, 5)
+toggleButton.BackgroundTransparency = 1
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextScaled = true
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Text = "Respawn: OFF"
+toggleButton.Parent = frame
+
+---------------------------------------------------------------------
+-- UI COLOR UPDATER
+---------------------------------------------------------------------
 local function updateButtonVisual()
 	if _G.UltraRespawn.Active then
 		toggleButton.Text = "Respawn: ON"
-		toggleButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
 	else
 		toggleButton.Text = "Respawn: OFF"
-		toggleButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
 	end
 end
 
@@ -55,7 +84,7 @@ end
 ---------------------------------------------------------------------
 local function disconnectAll()
 	for _, conn in ipairs(_G.UltraRespawn.Connections) do
-		if conn and conn.Connected then conn:Disconnect() end
+		if conn.Connected then conn:Disconnect() end
 	end
 	table.clear(_G.UltraRespawn.Connections)
 end
@@ -74,9 +103,10 @@ local function hookCharacter(char)
 
 	local triggered = false
 	local function triggerRespawn()
-		if not _G.UltraRespawn.Active or triggered then return end
-		triggered = true
-		task.defer(fireGuideOnce)
+		if _G.UltraRespawn.Active and not triggered then
+			triggered = true
+			task.defer(fireGuideOnce)
+		end
 	end
 
 	table.insert(_G.UltraRespawn.Connections, humanoid.Died:Connect(triggerRespawn))
@@ -121,10 +151,10 @@ local function toggleRespawn()
 end
 
 ---------------------------------------------------------------------
--- INPUT HANDLERS (KEYBOARD + MOBILE BUTTON)
+-- INPUT HANDLERS
 ---------------------------------------------------------------------
-UIS.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
+UIS.InputBegan:Connect(function(input, gp)
+	if gp then return end
 	if input.KeyCode == TOGGLE_KEY then
 		toggleRespawn()
 	end
@@ -132,14 +162,8 @@ end)
 
 toggleButton.MouseButton1Click:Connect(toggleRespawn)
 
----------------------------------------------------------------------
--- SYNC VISUAL AFTER RESPAWN
----------------------------------------------------------------------
-LocalPlayer.CharacterAdded:Connect(function(char)
-	-- make sure button is visible and shows correct state
-	updateButtonVisual()
-end)
+LocalPlayer.CharacterAdded:Connect(updateButtonVisual)
 
 ---------------------------------------------------------------------
-print("💠 ULTRA-INSTANT RESPAWN INITIALIZED — Press [" .. TOGGLE_KEY.Name .. "] or tap the button.")
+print("💠 ULTRA-INSTANT RESPAWN — Now With Rainbow UI!")
 updateButtonVisual()
