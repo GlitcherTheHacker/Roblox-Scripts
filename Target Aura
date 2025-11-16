@@ -1,214 +1,135 @@
--- Configuração inicial
-local auraRange = 999
-local auraSize = Vector3.new(30, 30, 30)
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local lp = Players.LocalPlayer
-local PlayerGui = lp:WaitForChild("PlayerGui")
-local connections = getgenv().configs and getgenv().configs.connections
-
--- Limpa conexões anteriores
-if connections then
-    local Disable = getgenv().configs.Disable
-    for _, v in ipairs(connections) do
-        v:Disconnect()
-    end
-    Disable:Fire()
-    Disable:Destroy()
-    table.clear(getgenv().configs)
+--=============================
+-- Target Aura
+--=============================
+local function rainbow()
+    local t = tick() * 2
+    return Color3.fromHSV((t % 1), 1, 1)
 end
 
--- Setup global
-local Disable = Instance.new("BindableEvent")
-getgenv().configs = {
-    connections = {},
-    Disable = Disable,
-    Size = auraSize,
-    DeathCheck = false,
-    TargetList = {},
-}
-local Run = true
-local Ignorelist = OverlapParams.new()
-Ignorelist.FilterType = Enum.RaycastFilterType.Include
-
--- Funções auxiliares
-local function getchar(plr) return (plr or lp).Character end
-local function GetTouchInterest(tool)
-    for _, obj in ipairs(tool:GetDescendants()) do
-        if obj:IsA("TouchTransmitter") and obj.Parent:IsA("BasePart") then
-            return obj.Parent -- retorna a parte com Touch
+local function applyRainbowText(obj)
+    task.spawn(function()
+        while obj and obj.Parent do
+            obj.TextColor3 = rainbow()
+            task.wait()
         end
-    end
-end
-local function GetCharacters()
-    local t = {}
-    for _, v in ipairs(Players:GetPlayers()) do
-        if v ~= lp and v.Character and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
-            table.insert(t, v.Character)
-        end
-    end
-    return t
-end
-local function Attack(Tool, TouchPart, TargetPart)
-    if Tool:IsDescendantOf(workspace) then
-        firetouchinterest(TouchPart, TargetPart, 1)
-        firetouchinterest(TouchPart, TargetPart, 0)
-    end
-end
-local function ApplyDamageInstant(Tool, TouchPart, Characters)
-    local InstancesInBox = workspace:GetPartBoundsInBox(TouchPart.CFrame, TouchPart.Size + getgenv().configs.Size, Ignorelist)
-    for _, v in ipairs(InstancesInBox) do
-        local Character = v:FindFirstAncestorWhichIsA("Model")
-        if Character then
-            for _, t in ipairs(getgenv().configs.TargetList) do
-                if t.Character == Character then
-                    Attack(Tool, TouchPart, v)
-                    break
-                end
-            end
-        end
-    end
+    end)
 end
 
--- Desativar sistema
-table.insert(getgenv().configs.connections, Disable.Event:Connect(function()
-    Run = false
-end))
+local function applyRainbowBorder(frame)
+    task.spawn(function()
+        while frame and frame.Parent do
+            frame.UIStroke.Color = rainbow()
+            task.wait()
+        end
+    end)
+end
 
--- Interface
+--=============================
+-- 🌈 SCREEN GUI
+--=============================
+
 local ScreenGui = Instance.new("ScreenGui", PlayerGui)
 ScreenGui.Name = "AuraGui"
 ScreenGui.ResetOnSpawn = false
 
+--=============================
+-- UI TOGGLE BUTTON
+--=============================
 local AuraBtn = Instance.new("TextButton", ScreenGui)
 AuraBtn.Name = "AuraToggle"
-AuraBtn.Size = UDim2.new(0, 60, 0, 25)
-AuraBtn.Position = UDim2.new(1, -70, 0, 10)
-AuraBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-AuraBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AuraBtn.Size = UDim2.new(0, 75, 0, 28)
+AuraBtn.Position = UDim2.new(1, -85, 0, 60)
+AuraBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 AuraBtn.Text = "AURA"
-AuraBtn.TextSize = 14
+AuraBtn.TextSize = 15
+AuraBtn.Font = Enum.Font.SourceSansBold
 
+-- Stroke
+local stroke = Instance.new("UIStroke", AuraBtn)
+stroke.Thickness = 2
+stroke.Color = Color3.new(1, 1, 1)
+
+-- Rainbow effects
+applyRainbowText(AuraBtn)
+applyRainbowBorder(AuraBtn)
+
+-- Rounded corners
+local corner = Instance.new("UICorner", AuraBtn)
+corner.CornerRadius = UDim.new(0, 6)
+
+--=============================
+-- PLAYER SELECTION FRAME
+--=============================
 local PlayerFrame = Instance.new("Frame", ScreenGui)
-PlayerFrame.Size = UDim2.new(0, 140, 0, 300)
-PlayerFrame.Position = UDim2.new(1, -150, 0, 40)
-PlayerFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+PlayerFrame.Size = UDim2.new(0, 160, 0, 320)
+PlayerFrame.Position = UDim2.new(1, -175, 0, 100)
+PlayerFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 PlayerFrame.Visible = false
 
+-- Stroke
+local pfStroke = Instance.new("UIStroke", PlayerFrame)
+pfStroke.Color = Color3.fromRGB(255, 255, 255)
+pfStroke.Thickness = 2
+applyRainbowBorder(PlayerFrame)
+
+local pfCorner = Instance.new("UICorner", PlayerFrame)
+pfCorner.CornerRadius = UDim.new(0, 10)
+
+-- Layout
 local UIListLayout = Instance.new("UIListLayout", PlayerFrame)
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0, 4)
+UIListLayout.Padding = UDim.new(0, 5)
 
--- Atualiza lista de jogadores
+--=============================
+-- UPDATE PLAYER LIST
+--=============================
 local function UpdatePlayers()
     for _, c in ipairs(PlayerFrame:GetChildren()) do
         if c:IsA("TextButton") then c:Destroy() end
     end
+
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= lp then
             local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(1, -10, 0, 24)
+            btn.Size = UDim2.new(1, -10, 0, 26)
             btn.Text = plr.Name
-            btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+            btn.TextSize = 14
+            btn.Font = Enum.Font.SourceSansBold
             btn.Parent = PlayerFrame
-            btn.TextSize = 13
+
+            local s = Instance.new("UIStroke", btn)
+            s.Thickness = 2
+            applyRainbowBorder(btn)
+
+            local c = Instance.new("UICorner", btn)
+            c.CornerRadius = UDim.new(0, 5)
+
+            applyRainbowText(btn)
 
             btn.MouseButton1Click:Connect(function()
                 local list = getgenv().configs.TargetList
                 local found = table.find(list, plr)
+
                 if found then
                     table.remove(list, found)
-                    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                    btn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
                 else
                     table.insert(list, plr)
-                    btn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+                    btn.BackgroundColor3 = Color3.fromRGB(0, 80, 0)
                 end
             end)
-
-            for _, t in ipairs(getgenv().configs.TargetList) do
-                if t == plr then
-                    btn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
-                    break
-                end
-            end
         end
     end
 end
 
+--=============================
+-- TOGGLE UI
+--=============================
 AuraBtn.MouseButton1Click:Connect(function()
     PlayerFrame.Visible = not PlayerFrame.Visible
     if PlayerFrame.Visible then UpdatePlayers() end
 end)
 
 Players.PlayerAdded:Connect(UpdatePlayers)
-Players.PlayerRemoving:Connect(function(plr)
-    local t = getgenv().configs.TargetList
-    for i = #t, 1, -1 do
-        if t[i] == plr then table.remove(t, i) end
-    end
-    UpdatePlayers()
-end)
-
--- Aura sem Activate (colisão instantânea)
-table.insert(getgenv().configs.connections, RunService.Heartbeat:Connect(function()
-    if not Run then return end
-    local TargetList = getgenv().configs.TargetList
-    if #TargetList == 0 then return end
-
-    local char = getchar()
-    if not char then return end
-    local Characters = GetCharacters()
-    Ignorelist.FilterDescendantsInstances = Characters
-
-    for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") then
-            local TouchPart = GetTouchInterest(tool)
-            if TouchPart then
-                ApplyDamageInstant(tool, TouchPart, Characters)
-            end
-        end
-    end
-end))
-
--- Aura com firetouch - foca no alvo com menos vida e usa todas ferramentas
-table.insert(getgenv().configs.connections, RunService.RenderStepped:Connect(function()
-    if not Run then return end
-    local TargetList = getgenv().configs.TargetList
-    if #TargetList == 0 then return end
-
-    local char = getchar()
-    if not char then return end
-
-    local sortedTargets = {}
-    for _, plr in ipairs(TargetList) do
-        if plr.Character and plr.Character:FindFirstChild("Humanoid") and plr.Character:FindFirstChild("HumanoidRootPart") then
-            if plr.Character.Humanoid.Health > 0 and lp:DistanceFromCharacter(plr.Character.HumanoidRootPart.Position) <= auraRange then
-                table.insert(sortedTargets, {
-                    Humanoid = plr.Character.Humanoid,
-                    Char = plr.Character
-                })
-            end
-        end
-    end
-    table.sort(sortedTargets, function(a, b)
-        return a.Humanoid.Health < b.Humanoid.Health
-    end)
-
-    if #sortedTargets == 0 then return end
-
-    local targetChar = sortedTargets[1].Char
-    for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") then
-            local TouchPart = GetTouchInterest(tool)
-            if TouchPart then
-                for _, part in ipairs(targetChar:GetChildren()) do
-                    if part:IsA("BasePart") then
-                        firetouchinterest(TouchPart, part, 1)
-                        firetouchinterest(TouchPart, part, 0)
-                    end
-                end
-            end
-        end
-    end
-end))
+Players.PlayerRemoving:Connect(UpdatePlayers)
