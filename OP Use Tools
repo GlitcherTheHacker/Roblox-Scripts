@@ -1,4 +1,4 @@
--- ⚡ USE TOOLS — ULTRA OVERDRIVE (Auto-Unequip Edition) ⚡
+-- ⚡ USE TOOLS ⚡
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,146 +7,147 @@ local UIS = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local PostSim = RunService.PostSimulation
 
--- === GUI SETUP ===
+-- =====================================================
+-- 🌀 RAINBOW ANIMATION
+-- =====================================================
+local function rainbow(t)
+    local h = (tick() * .6 + t) % 1
+    return Color3.fromHSV(h, 1, 1)
+end
+
+-- =====================================================
+-- 🖥 GUI SETUP
+-- =====================================================
 local gui = Instance.new("ScreenGui")
-gui.Name = "UltraUseTools"
+gui.Name = "UltraUseTools_Void"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 gui.Parent = game:GetService("CoreGui")
 
-local toggle = Instance.new("TextButton")
-toggle.Size = UDim2.new(0, 100, 0, 40) -- Smaller, cleaner button
-toggle.AnchorPoint = Vector2.new(1, 0.5)
-toggle.Position = UDim2.new(1, -20, 0.5, 0)
-toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-toggle.Font = Enum.Font.GothamBold
-toggle.Text = "OFF"
-toggle.TextSize = 20
-toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggle.BorderSizePixel = 0
-toggle.AutoButtonColor = false
-toggle.Active = true
-toggle.Draggable = true
-toggle.Parent = gui
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 150, 0, 50)
+button.AnchorPoint = Vector2.new(1, 0)
+button.Position = UDim2.new(1, -25, 0, 100)
+button.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+button.Text = "USE TOOLS: OFF"
+button.TextSize = 20
+button.Font = Enum.Font.GothamBlack
+button.TextColor3 = Color3.fromRGB(255, 255, 255)
+button.BorderSizePixel = 0
+button.AutoButtonColor = false
+button.Active = true
+button.Draggable = true
+button.Parent = gui
 
-local corner = Instance.new("UICorner", toggle)
-corner.CornerRadius = UDim.new(0.4, 0)
+local corner = Instance.new("UICorner", button)
+corner.CornerRadius = UDim.new(0, 10)
 
-local shadow = Instance.new("Frame")
-shadow.Size = toggle.Size + UDim2.new(0, 5, 0, 5)
-shadow.AnchorPoint = toggle.AnchorPoint
-shadow.Position = toggle.Position + UDim2.new(0, 3, 0, 3)
-shadow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-shadow.BackgroundTransparency = 0.65
-shadow.ZIndex = toggle.ZIndex - 1
-shadow.Parent = gui
+-- Border Frame
+local border = Instance.new("UIStroke")
+border.Thickness = 3
+border.Color = Color3.fromRGB(255, 255, 255)
+border.Parent = button
 
-toggle:GetPropertyChangedSignal("Position"):Connect(function()
-	shadow.Position = toggle.Position + UDim2.new(0, 3, 0, 3)
+-- Rainbow Pulse Loop
+task.spawn(function()
+    while true do
+        border.Color = rainbow(0)
+        button.TextColor3 = rainbow(.2)
+        task.wait(.03)
+    end
 end)
 
--- === STATE ===
+-- =====================================================
+-- 🔥 TOOL MECHANICS 
+-- =====================================================
 local active = false
 local loopRunning = false
 
+local function equipAll()
+    local bp = player:FindFirstChild("Backpack")
+    local char = player.Character
+    if not (bp and char) then return end
+
+    for _, t in ipairs(bp:GetChildren()) do
+        if t:IsA("Tool") then t.Parent = char end
+    end
+end
+
+local function activateAll()
+    local char = player.Character
+    if not char then return end
+
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") then
+            task.spawn(function()
+                pcall(function()
+                    tool:Activate()
+                end)
+            end)
+        end
+    end
+end
+
+local function ultraLoop()
+    if loopRunning then return end
+    loopRunning = true
+
+    task.spawn(function()
+        while true do
+            if active then
+                equipAll()
+
+                -- Max frequency: microtask + PostSim + fast wait
+                activateAll()
+                task.wait()          -- microdelay
+                activateAll()
+                PostSim:Wait()       -- subframe tick
+            end
+        end
+    end)
+end
+
+-- =====================================================
+-- 🎛 TOGGLE
+-- =====================================================
 local function updateButton()
-	if active then
-		toggle.Text = "ON"
-		toggle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		toggle.TextColor3 = Color3.fromRGB(0, 0, 0)
-	else
-		toggle.Text = "OFF"
-		toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-		toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-	end
+    if active then
+        button.Text = "USE TOOLS: ON"
+        button.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    else
+        button.Text = "USE TOOLS: OFF"
+        button.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    end
 end
 
--- === TOOL HANDLERS ===
-local function equipAllTools()
-	local char = player.Character
-	if not char then return end
-	local backpack = player:FindFirstChild("Backpack")
-	if backpack then
-		for _, tool in ipairs(backpack:GetChildren()) do
-			if tool:IsA("Tool") then
-				tool.Parent = char
-			end
-		end
-	end
+local function toggle()
+    active = not active
+    updateButton()
+
+    if active then
+        equipAll()
+    end
+
+    if not loopRunning then ultraLoop() end
 end
 
-local function unequipAllTools()
-	local char = player.Character
-	if not char then return end
-	local backpack = player:FindFirstChild("Backpack")
-	if backpack then
-		for _, tool in ipairs(char:GetChildren()) do
-			if tool:IsA("Tool") then
-				tool.Parent = backpack
-			end
-		end
-	end
-end
+button.MouseButton1Click:Connect(toggle)
 
--- === ULTRA-FAST LOOP ===
-local function toolLoop()
-	if loopRunning then return end
-	loopRunning = true
-	task.spawn(function()
-		while true do
-			if active then
-				local char = player.Character
-				if char then
-					equipAllTools()
-					for _, tool in ipairs(char:GetChildren()) do
-						if tool:IsA("Tool") then
-							pcall(function()
-								tool:Activate()
-							end)
-						end
-					end
-				end
-			end
-			PostSim:Wait() -- Subframe precision tick
-		end
-	end)
-end
-
--- === TOGGLE FUNCTIONALITY ===
-local function toggleState()
-	active = not active
-	updateButton()
-	if active then
-		equipAllTools()
-	else
-		unequipAllTools() -- Instantly unequip all tools when toggled off
-	end
-	if not loopRunning then
-		toolLoop()
-	end
-end
-
--- === INPUT BINDINGS ===
-toggle.MouseButton1Click:Connect(toggleState)
-UIS.InputBegan:Connect(function(input, gp)
-	if not gp and input.KeyCode == Enum.KeyCode.Q then
-		toggleState()
-	end
+-- Hotkey (Q)
+UIS.InputBegan:Connect(function(i, gp)
+    if gp then return end
+    if i.KeyCode == Enum.KeyCode.Q then
+        toggle()
+    end
 end)
 
--- === CHARACTER HANDLER ===
-player.CharacterAdded:Connect(function(char)
-	char:WaitForChild("HumanoidRootPart", 3)
-	if active then
-		task.wait(0.1)
-		equipAllTools()
-	else
-		task.wait(0.1)
-		unequipAllTools()
-	end
+-- Respawn logic
+player.CharacterAdded:Connect(function()
+    task.wait(.25)
+    if active then equipAll() end
 end)
 
--- === INIT ===
 updateButton()
-toolLoop()
-print("⚙️ USE TOOLS — ULTRA OVERDRIVE (Auto-Unequip Edition) Initialized")
+ultraLoop()
+
+print("⚡ USE TOOLS Initilized")
