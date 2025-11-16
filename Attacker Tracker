@@ -1,41 +1,59 @@
--- Attacker Tracker (LocalScript)
--- Place in StarterPlayerScripts or run via executor in your testing place
+-- Attacker Tracker v2
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TextChatService = game:GetService("TextChatService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
+-- ====================
 -- CONFIG
-local INACTIVITY_TIMEOUT = 5       -- seconds until an attacker is removed when no new hits
-local SCAN_RADIUS = 16             -- radius to search for likely attackers when health drops
-local POLL_INTERVAL = 0.25         -- UI / housekeeping tick
-local HISTORY_MAX = 200            -- keep last N attackers in history
+-- ====================
+local INACTIVITY_TIMEOUT = 5        -- seconds until an attacker is archived when no new hits
+local UI_POLL = 0.20                -- UI refresh interval
+local HISTORY_MAX = 400             -- keep up to N historical attacker records
+local RECENT_HIT_WINDOW = 4         -- seconds window to credit kills to recent hits
+local KILL_DETECTION_WINDOW = 6     -- seconds to wait between hit and death to credit kill heuristically
 
--- Try to find a remote commonly named "FightEvent" (may be nil)
-local function findFightRemote()
-    local remote = ReplicatedStorage:FindFirstChild("FightEvent") -- common name
-    if remote then return remote end
-    -- scan ReplicatedStorage (shallow)
+-- cosmetic
+local UI_BASE_W, UI_BASE_H = 420, 340
+
+-- ====================
+-- Utilities & detection helpers
+-- ====================
+local function safeFindFightRemote()
+    -- tries to find a commonly named remote in ReplicatedStorage
+    local candidates = {"FightEvent", "FightRemote", "DamageEvent", "HitEvent"}
+    for _, name in ipairs(candidates) do
+        local r = ReplicatedStorage:FindFirstChild(name)
+        if r and r:IsA("RemoteEvent") then return r end
+    end
+    -- fallback: shallow scan
     for _, v in ipairs(ReplicatedStorage:GetChildren()) do
-        if v:IsA("RemoteEvent") and v.Name:lower():match("fight") then
+        if v:IsA("RemoteEvent") and tostring(v.Name):lower():match("fight") or tostring(v.Name):lower():match("hit") then
             return v
         end
     end
     return nil
 end
 
-local FightRemote = findFightRemote()
+local FightRemote = safeFindFightRemote()
 
--- Data structures
-local attackers = {}   -- attackers[name] = {lastHit = os.time(), hits = n}
-local history = {}     -- array of {name, timeFirst, timeLast, hits}
-local uiOpen = false
+local function now()
+    return os.clock()
+end
 
--- Utility: add or refresh attacker
+-- attackers[name] = { lastHit = os.clock(), hits = n, firstSeen = ts }
+local attackers = {}
+local history = {} -- array of {name, timeFirst, timeLast, hits}
+local recentHits = {} -- recentHits[targetName] = { attacker = "You" or "Name", ts = os.clock() } for kill heuristics
+
+-- helper: register or refresh an attacker
 local function registerAttacker(name)
-    if not name then return end
-    local t = os.time()
+    if not name or name == "" then return end
+    local t = now()
     local entry = attackers[name]
     if entry then
         entry.lastHit = t
@@ -45,7 +63,7 @@ local function registerAttacker(name)
     end
 end
 
--- Utility: move attacker to history and remove from attackers list
+-- move attacker to history
 local function archiveAttacker(name)
     local entry = attackers[name]
     if not entry then return end
@@ -55,123 +73,122 @@ local function archiveAttacker(name)
         timeLast = entry.lastHit,
         hits = entry.hits
     })
-    -- clamp history size
     while #history > HISTORY_MAX do table.remove(history) end
     attackers[name] = nil
 end
 
--- Heuristic scanning on health loss:
--- attempt to find a player who likely caused the damage:
-local function scanForLikelyAttacker()
+-- housekeeping: remove stale attackers
+local function cleanupInactive()
+    local t = now()
+    for name, data in pairs(attackers) do
+        if t - data.lastHit >= INACTIVITY_TIMEOUT then
+            archiveAttacker(name)
+        end
+    end
+end
+
+-- try to extract player name from various payload shapes
+local function extractNameFromPayload(a)
+    if not a then return nil end
+    if typeof(a) == "Instance" and a:IsA("Player") then return a.Name end
+    if type(a) == "string" then return a end
+    if type(a) == "table" then
+        if a.attacker and typeof(a.attacker) == "Instance" and a.attacker:IsA("Player") then return a.attacker.Name end
+        if a.attackerName and type(a.attackerName) == "string" then return a.attackerName end
+        if a[1] and typeof(a[1]) == "Instance" and a[1]:IsA("Player") then return a[1].Name end
+    end
+    return nil
+end
+
+-- Heuristics: find "creator" tags anywhere in workspace (not limited by distance)
+local function findCreatorTagAnywhere()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") or obj:IsA("Model") then
+            local creator = obj:FindFirstChild("creator") or obj:FindFirstChild("Creator") or obj:FindFirstChild("Owner")
+            if creator and creator.Value then
+                -- creator may be Player instance or string
+                if typeof(creator.Value) == "Instance" and creator.Value:IsA("Player") then
+                    return creator.Value.Name
+                elseif type(creator.Value) == "string" then
+                    return creator.Value
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Heuristic scanning by proximity (fallback)
+local function scanClosestPlayer()
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
     local myPos = char.HumanoidRootPart.Position
-
-    local best = nil
-    local bestScore = math.huge
-
+    local best, bestScore = nil, math.huge
     for _, pl in ipairs(Players:GetPlayers()) do
         if pl ~= LocalPlayer and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
-            local root = pl.Character.HumanoidRootPart
-            local dist = (root.Position - myPos).Magnitude
-            if dist <= SCAN_RADIUS then
-                -- prefer closer players; check if they hold tools
-                local holdingTool = false
-                for _, c in ipairs(pl.Character:GetChildren()) do
-                    if c:IsA("Tool") then holdingTool = true; break end
-                end
-                local score = dist - (holdingTool and 2 or 0)
-                if score < bestScore then
-                    bestScore = score
-                    best = pl
-                end
+            local d = (pl.Character.HumanoidRootPart.Position - myPos).Magnitude
+            local hasTool = false
+            for _, c in ipairs(pl.Character:GetChildren()) do
+                if c:IsA("Tool") then hasTool = true; break end
             end
+            local score = d - (hasTool and 2 or 0)
+            if score < bestScore then bestScore, best = score, pl end
         end
     end
-
-    if best then return best.Name end
-    return nil
+    return best and best.Name or nil
 end
 
--- More advanced: try to detect creator tag on nearby parts/tools (common pattern)
-local function findCreatorFromWorkspaceNearby()
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
-    local rootPos = char.HumanoidRootPart.Position
-    -- iterate tools and objects closeby for creator ObjectValue or StringValue tags
-    for _, object in ipairs(workspace:GetDescendants()) do
-        if object:IsA("BasePart") then
-            local d = (object.Position - rootPos).Magnitude
-            if d <= SCAN_RADIUS then
-                -- check for common creator tag names
-                local creator = object:FindFirstChild("creator") or object:FindFirstChild("Creator") or object:FindFirstChild("Owner")
-                if creator and (creator.Value and typeof(creator.Value) == "Instance" and creator.Value:IsA("Player")) then
-                    return creator.Value.Name
-                elseif creator and type(creator.Value) == "string" then
-                    return creator.Value
-                end
-                -- check parent for a tool or model with a creator
-                local parent = object.Parent
-                if parent then
-                    local ctag = parent:FindFirstChild("creator") or parent:FindFirstChild("Creator")
-                    if ctag and ctag.Value and typeof(ctag.Value) == "Instance" and ctag.Value:IsA("Player") then
-                        return ctag.Value.Name
-                    end
-                end
+-- =============
+-- FightRemote primary detection
+-- =============
+if FightRemote and FightRemote:IsA("RemoteEvent") then
+    pcall(function()
+        FightRemote.OnClientEvent:Connect(function(...)
+            -- robust extraction
+            local args = {...}
+            local attackerName = extractNameFromPayload(args[1]) or extractNameFromPayload(args[2])
+            if attackerName then
+                registerAttacker(attackerName)
             end
-        end
-    end
-    return nil
-end
 
--- Primary detection via FightRemote (if exists):
-if FightRemote and FightRemote.IsA and FightRemote:IsA("RemoteEvent") then
-    -- Server may send a payload: attacker (Player/Name), or {attacker, damage}, etc
-    FightRemote.OnClientEvent:Connect(function(...)
-        local args = {...}
-        -- Try to extract attacker info from common payload shapes
-        local attackerName = nil
-        if #args >= 1 then
-            local a = args[1]
-            if typeof(a) == "Instance" and a:IsA("Player") then
-                attackerName = a.Name
-            elseif type(a) == "string" then
-                attackerName = a
-            elseif type(a) == "table" then
-                -- table might contain attacker = player
-                if a.attacker and typeof(a.attacker) == "Instance" and a.attacker:IsA("Player") then
-                    attackerName = a.attacker.Name
-                elseif a.attackerName and type(a.attackerName) == "string" then
-                    attackerName = a.attackerName
-                end
+            -- if the payload contains victim and attacker shape, also record 'recentHits' for kill heuristics
+            -- many fight remotes use (attacker, victim) or {attacker=...,victim=...}
+            local victimName
+            if #args >= 2 then
+                if typeof(args[2]) == "Instance" and args[2]:IsA("Player") then victimName = args[2].Name end
+                if type(args[2]) == "string" then victimName = args[2] end
             end
-        end
-        if attackerName then
-            registerAttacker(attackerName)
-        end
+            if victimName and attackerName and victimName == LocalPlayer.Name then
+                -- someone hit you
+                registerAttacker(attackerName)
+            end
+            if victimName and attackerName and attackerName == LocalPlayer.Name then
+                -- we hit someone — store for kill heuristics (credited if they die soon after)
+                recentHits[victimName] = now()
+            end
+        end)
     end)
 end
 
--- Secondary detection via Humanoid health changes
+-- =============
+-- Health watcher — fallback detection when FightRemote not available or incomplete
+-- =============
 local lastHealth = nil
-local function hookHealthWatcher()
+local function hookHealth()
     local char = LocalPlayer.Character
     if not char then return end
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not humanoid then return end
     lastHealth = humanoid.Health
-
     humanoid:GetPropertyChangedSignal("Health"):Connect(function()
         local new = humanoid.Health
         if new < (lastHealth or new) then
-            -- health decreased -> try identify attacker
-            -- try creator tags first
-            local name = findCreatorFromWorkspaceNearby()
+            -- Health decreased: attempt to find attacker via multiple heuristics
+            local name = findCreatorTagAnywhere()
             if not name then
-                name = scanForLikelyAttacker()
+                name = scanClosestPlayer()
             end
             if not name then
-                -- fallback to generic "Unknown" with timestamp to track in UI
                 name = "Unknown"
             end
             registerAttacker(name)
@@ -180,197 +197,811 @@ local function hookHealthWatcher()
     end)
 end
 
--- Attach health watcher whenever character spawns
-Players.LocalPlayer.CharacterAdded:Connect(function(char)
-    wait(0.5)
-    hookHealthWatcher()
+Players.LocalPlayer.CharacterAdded:Connect(function()
+    -- small delay to ensure humanoid exists
+    task.wait(0.4)
+    pcall(hookHealth)
 end)
 if Players.LocalPlayer.Character then
-    hookHealthWatcher()
+    pcall(hookHealth)
 end
 
--- Housekeeping: remove inactive attackers after timeout
-local function cleanupInactive()
-    local now = os.time()
-    for name, data in pairs(attackers) do
-        if now - data.lastHit >= INACTIVITY_TIMEOUT then
-            archiveAttacker(name)
+-- =============
+-- Kill / death detection (for Kill Counter page)
+-- approach:
+--  - track recentHits[victimName] when we damage them (via FightRemote)
+--  - connect to all players' humanoid.Died and check creator tags or recentHits to credit local-kill
+--  - for deaths vs selected target: when LocalPlayer dies, try to identify killer using creator tags or heuristics
+-- =============
+local killTrack = {} -- killTrack[selectedName] = {kills = n, deaths = m}
+local selectedForKillTrack = nil
+
+local function ensurePlayerCharacterConnections(pl)
+    -- attaches a Died listener on the player's humanoid to detect kills
+    if not pl or not pl:IsA("Player") then return end
+    local function onChar(char)
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if not humanoid then
+            humanoid = char:WaitForChild("Humanoid", 3)
+            if not humanoid then return end
         end
+        humanoid.Died:Connect(function()
+            -- who killed this player?
+            -- 1) creator tag on humanoid or model
+            local killerName = nil
+            local creator = humanoid:FindFirstChild("creator") or humanoid:FindFirstChild("Creator")
+            if creator and creator.Value then
+                if typeof(creator.Value) == "Instance" and creator.Value:IsA("Player") then
+                    killerName = creator.Value.Name
+                elseif type(creator.Value) == "string" then
+                    killerName = creator.Value
+                end
+            end
+
+            -- 2) if we have recentHits[victim], credit last hitter
+            if not killerName then
+                local last = recentHits[pl.Name]
+                if last and now() - last <= KILL_DETECTION_WINDOW then
+                    killerName = LocalPlayer.Name -- recentHits were recorded only for local player's hits
+                end
+            end
+
+            -- 3) try find nearby creator tags (global search)
+            if not killerName then
+                killerName = findCreatorTagAnywhere()
+            end
+
+            -- If the dead player was the selected tracking target, and the killer was us, increment our kills
+            if selectedForKillTrack and pl.Name == selectedForKillTrack then
+                if killerName == LocalPlayer.Name then
+                    killTrack[selectedForKillTrack] = killTrack[selectedForKillTrack] or {kills = 0, deaths = 0}
+                    killTrack[selectedForKillTrack].kills = (killTrack[selectedForKillTrack].kills or 0) + 1
+                end
+            end
+
+            -- If the killer was the selected player and victim was LocalPlayer, increment deaths
+            -- This handled in LocalPlayer death watcher below
+        end)
     end
+
+    if pl.Character then onChar(pl.Character) end
+    pl.CharacterAdded:Connect(onChar)
 end
 
--- ---------------------------
--- UI: Toggle button + panel
--- ---------------------------
+-- connect to all players' character deaths
+for _, pl in ipairs(Players:GetPlayers()) do
+    ensurePlayerCharacterConnections(pl)
+end
+Players.PlayerAdded:Connect(function(pl) ensurePlayerCharacterConnections(pl) end)
+
+-- LocalPlayer death watcher to credit if selected player killed you
+local function hookLocalDeath()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    humanoid.Died:Connect(function()
+        -- try find killer
+        local killerName = nil
+        local creator = humanoid:FindFirstChild("creator") or humanoid:FindFirstChild("Creator")
+        if creator and creator.Value then
+            if typeof(creator.Value) == "Instance" and creator.Value:IsA("Player") then
+                killerName = creator.Value.Name
+            elseif type(creator.Value) == "string" then
+                killerName = creator.Value
+            end
+        end
+        if not killerName then
+            killerName = findCreatorTagAnywhere()
+        end
+        if not killerName then
+            killerName = "Unknown"
+        end
+
+        if selectedForKillTrack and killerName == selectedForKillTrack then
+            killTrack[selectedForKillTrack] = killTrack[selectedForKillTrack] or {kills = 0, deaths = 0}
+            killTrack[selectedForKillTrack].deaths = (killTrack[selectedForKillTrack].deaths or 0) + 1
+        end
+    end)
+end
+
+Players.LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.3)
+    pcall(hookLocalDeath)
+end)
+if Players.LocalPlayer.Character then pcall(hookLocalDeath) end
+
+-- ====================
+-- UI: main window, pages, rainbow stroke animation
+-- ====================
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+if PlayerGui:FindFirstChild("AttackerTrackerGui") then PlayerGui.AttackerTrackerGui:Destroy() end
+
 local screen = Instance.new("ScreenGui")
-screen.Name = "AttackerTrackerGUI"
+screen.Name = "AttackerTrackerGui"
 screen.ResetOnSpawn = false
 screen.Parent = PlayerGui
+screen.DisplayOrder = 500
 
--- Toggle button
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0, 180, 0, 36)
-toggleBtn.Position = UDim2.new(0, 10, 0, 120)
-toggleBtn.AnchorPoint = Vector2.new(0,0)
-toggleBtn.Text = "Attackers: 0"
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.TextSize = 14
-toggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
-toggleBtn.TextColor3 = Color3.fromRGB(220,220,220)
-toggleBtn.Parent = screen
-toggleBtn.AutoButtonColor = true
-local corner = Instance.new("UICorner", toggleBtn); corner.CornerRadius = UDim.new(0,8)
+-- mobile-autoscale
+local uiScale = Instance.new("UIScale", screen)
+local function computeScale()
+    local vp = Camera and Camera.ViewportSize or Vector2.new(1280,720)
+    local minDim = math.min(vp.X, vp.Y)
+    if UserInputService.TouchEnabled then
+        return math.clamp(minDim / 900, 0.56, 0.95)
+    else
+        return math.clamp(minDim / 1200, 0.9, 1.06)
+    end
+end
+uiScale.Scale = computeScale()
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function() uiScale.Scale = computeScale() end)
+if Camera then Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function() uiScale.Scale = computeScale() end) end
 
--- Panel
-local panel = Instance.new("Frame")
-panel.Size = UDim2.new(0, 360, 0, 300)
-panel.Position = UDim2.new(0, 10, 0, 160)
-panel.BackgroundColor3 = Color3.fromRGB(18,18,22)
-panel.Visible = false
-panel.Parent = screen
-Instance.new("UICorner", panel).CornerRadius = UDim.new(0,10)
+-- rainbow stroke registry
+local rainbowStrokes = {}
+local function registerStroke(s) if s then table.insert(rainbowStrokes, s) end end
+local function hsv(h,s,v) return Color3.fromHSV((h%1), s, v) end
+spawn(function()
+    while screen.Parent do
+        local base = (tick() * 0.18) % 1
+        local n = #rainbowStrokes
+        if n > 0 then
+            for i, st in ipairs(rainbowStrokes) do
+                if st and st.Parent then
+                    local offset = (i-1)/math.max(1,n) * 0.18
+                    st.Color = hsv(base + offset, 0.92, 0.95)
+                end
+            end
+        end
+        task.wait(0.04)
+    end
+end)
 
--- Header on panel
-local header = Instance.new("TextLabel")
-header.Size = UDim2.new(1, -12, 0, 30)
-header.Position = UDim2.new(0, 6, 0, 6)
-header.BackgroundTransparency = 1
-header.Text = "Attacker Tracking Hub"
-header.Font = Enum.Font.GothamBold
-header.TextSize = 16
-header.TextColor3 = Color3.fromRGB(235,235,235)
-header.Parent = panel
+-- main container
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0, UI_BASE_W, 0, UI_BASE_H)
+main.Position = UDim2.new(0.5, 0, -1.2, 0) -- off-screen start
+main.AnchorPoint = Vector2.new(0.5, 0.5)
+main.BackgroundColor3 = Color3.fromRGB(18,18,22)
+main.Parent = screen
+local mainCorner = Instance.new("UICorner", main); mainCorner.CornerRadius = UDim.new(0, 10)
+local mainStroke = Instance.new("UIStroke", main); mainStroke.Thickness = 2; registerStroke(mainStroke)
 
--- Live list container
-local liveLabel = Instance.new("TextLabel", panel)
-liveLabel.Size = UDim2.new(1, -12, 0, 22)
-liveLabel.Position = UDim2.new(0, 6, 0, 40)
-liveLabel.BackgroundTransparency = 1
-liveLabel.Font = Enum.Font.Gotham
-liveLabel.TextSize = 13
-liveLabel.TextColor3 = Color3.fromRGB(200,200,200)
-liveLabel.TextXAlignment = Enum.TextXAlignment.Left
+-- header
+local header = Instance.new("Frame", main)
+header.Size = UDim2.new(1, 0, 0, 56)
+header.Position = UDim2.new(0, 0, 0, 0)
+header.BackgroundColor3 = Color3.fromRGB(22,22,26)
+local headerCorner = Instance.new("UICorner", header); headerCorner.CornerRadius = UDim.new(0, 10)
+local headerStroke = Instance.new("UIStroke", header); headerStroke.Thickness = 1; registerStroke(headerStroke)
 
-local liveScroll = Instance.new("ScrollingFrame")
-liveScroll.Size = UDim2.new(1, -12, 0, 120)
-liveScroll.Position = UDim2.new(0, 6, 0, 64)
+local title = Instance.new("TextLabel", header)
+title.Size = UDim2.new(0.6, -12, 1, 0)
+title.Position = UDim2.new(0, 12, 0, 0)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.TextColor3 = Color3.fromRGB(230,230,230)
+title.Text = "Attacker Tracking Hub"
+local titleStroke = Instance.new("UIStroke", title); titleStroke.Thickness = 1; registerStroke(titleStroke)
+
+-- small subtitle to the right of the title (moved for better visibility)
+local subtitle = Instance.new("TextLabel", header)
+subtitle.Size = UDim2.new(0.4, -20, 1, 0)
+subtitle.Position = UDim2.new(0.6, 0, 0, 0)
+subtitle.BackgroundTransparency = 1
+subtitle.TextXAlignment = Enum.TextXAlignment.Right
+subtitle.Font = Enum.Font.Gotham
+subtitle.TextSize = 12
+subtitle.TextColor3 = Color3.fromRGB(190,190,190)
+subtitle.Text = "Live — Press /tracker to open"
+local subtitleStroke = Instance.new("UIStroke", subtitle); subtitleStroke.Thickness = 1; registerStroke(subtitleStroke)
+
+-- left navigation (small vertical button strip)
+local nav = Instance.new("Frame", main)
+nav.Size = UDim2.new(0, 96, 1, -56)
+nav.Position = UDim2.new(0, 0, 0, 56)
+nav.BackgroundColor3 = Color3.fromRGB(20,20,24)
+local navCorner = Instance.new("UICorner", nav); navCorner.CornerRadius = UDim.new(0, 8)
+local navStroke = Instance.new("UIStroke", nav); navStroke.Thickness = 1; registerStroke(navStroke)
+
+-- pages area
+local content = Instance.new("Frame", main)
+content.Size = UDim2.new(1, -96, 1, -56)
+content.Position = UDim2.new(0, 96, 0, 56)
+content.BackgroundTransparency = 1
+
+-- page creation helper
+local Pages = {}
+local currentPage = nil
+local function createPage(name)
+    local p = Instance.new("ScrollingFrame")
+    p.Name = name
+    p.Size = UDim2.new(1, 0, 1, 0)
+    p.Position = UDim2.new(1, 0, 0, 0)
+    p.BackgroundTransparency = 1
+    p.CanvasSize = UDim2.new(0,0,0,0)
+    p.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    p.ScrollBarThickness = 6
+    p.Parent = content
+    local layout = Instance.new("UIListLayout", p)
+    layout.Padding = UDim.new(0,8)
+    return p
+end
+
+local function showPage(name)
+    if currentPage == name then return end
+    local old = currentPage and Pages[currentPage]
+    local new = Pages[name]
+    if not new then return end
+    currentPage = name
+    -- animate
+    if old then
+        spawn(function() -- slide old out left
+            old:TweenPosition(UDim2.new(-1,0,0,0), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.18, true)
+            task.wait(0.18)
+            old.Position = UDim2.new(1,0,0,0)
+        end)
+    end
+    new.Position = UDim2.new(1,0,0,0)
+    new:TweenPosition(UDim2.new(0,0,0,0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.18, true)
+end
+
+-- nav button factory
+local function makeNavButton(text, order)
+    local btn = Instance.new("TextButton", nav)
+    btn.Size = UDim2.new(1, -12, 0, 40)
+    btn.Position = UDim2.new(0, 6, 0, (order-1) * 48 + 10)
+    btn.BackgroundColor3 = Color3.fromRGB(18,18,20)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 14
+    btn.TextColor3 = Color3.fromRGB(220,220,220)
+    btn.Text = text
+    local corner = Instance.new("UICorner", btn); corner.CornerRadius = UDim.new(0,8)
+    local stroke = Instance.new("UIStroke", btn); stroke.Thickness = 1; registerStroke(stroke)
+    return btn
+end
+
+-- create pages
+Pages.Tracker = createPage("Tracker")      -- live attackers
+Pages.History = createPage("History")      -- archived attackers
+Pages.KillCounter = createPage("KillCounter") -- choose player, count kills/deaths
+Pages.Threats = createPage("Threats")      -- threat matrix
+Pages.Misc = createPage("Misc")            -- current attacker details
+
+-- create nav buttons
+local navButtons = {
+    {name="Tracker", btn=makeNavButton("Tracker", 1)},
+    {name="History", btn=makeNavButton("History", 2)},
+    {name="KillCounter", btn=makeNavButton("Kills", 3)},
+    {name="Threats", btn=makeNavButton("Threats", 4)},
+    {name="Misc", btn=makeNavButton("Misc", 5)}
+}
+for _, v in ipairs(navButtons) do
+    local pageName = v.name
+    v.btn.MouseButton1Click:Connect(function()
+        showPage(pageName)
+    end)
+end
+
+showPage("Tracker")
+
+-- =============
+-- Page: TRACKER (live attackers)
+-- =============
+local trackerHeader = Instance.new("TextLabel")
+trackerHeader.Size = UDim2.new(1, -12, 0, 28)
+trackerHeader.Position = UDim2.new(0, 6, 0, 6)
+trackerHeader.BackgroundTransparency = 1
+trackerHeader.Text = "Live Attackers"
+trackerHeader.Font = Enum.Font.GothamBold
+trackerHeader.TextSize = 16
+trackerHeader.TextColor3 = Color3.fromRGB(230,230,230)
+trackerHeader.Parent = Pages.Tracker
+local thStroke = Instance.new("UIStroke", trackerHeader); registerStroke(thStroke)
+
+local liveContainer = Instance.new("Frame", Pages.Tracker)
+liveContainer.Size = UDim2.new(1, -12, 0, 180)
+liveContainer.BackgroundTransparency = 1
+local liveScroll = Instance.new("ScrollingFrame", liveContainer)
+liveScroll.Size = UDim2.new(1,0,1,0)
 liveScroll.BackgroundTransparency = 1
-liveScroll.ScrollBarThickness = 6
-liveScroll.Parent = panel
+liveScroll.CanvasSize = UDim2.new(0,0,0,0)
 local liveLayout = Instance.new("UIListLayout", liveScroll)
 liveLayout.Padding = UDim.new(0,6)
 
--- History pane
-local historyLabel = Instance.new("TextLabel", panel)
-historyLabel.Size = UDim2.new(1, -12, 0, 20)
-historyLabel.Position = UDim2.new(0, 6, 0, 190)
-historyLabel.BackgroundTransparency = 1
-historyLabel.Font = Enum.Font.Gotham
-historyLabel.TextSize = 13
-historyLabel.TextColor3 = Color3.fromRGB(190,190,190)
-historyLabel.TextXAlignment = Enum.TextXAlignment.Left
-historyLabel.Text = "History:"
+local function makeLiveRow(name, hits, timeLeft)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 36)
+    row.BackgroundColor3 = Color3.fromRGB(12,12,15)
+    row.Parent = liveScroll
+    local rc = Instance.new("UICorner", row); rc.CornerRadius = UDim.new(0,8)
+    local stroke = Instance.new("UIStroke", row); registerStroke(stroke)
 
-local historyScroll = Instance.new("ScrollingFrame")
-historyScroll.Size = UDim2.new(1, -12, 0, 100)
-historyScroll.Position = UDim2.new(0, 6, 0, 212)
+    local label = Instance.new("TextLabel", row)
+    label.Size = UDim2.new(0.6, -10, 1, 0)
+    label.Position = UDim2.new(0, 8, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextColor3 = Color3.fromRGB(230,230,230)
+    label.Text = name
+
+    local hitsLabel = Instance.new("TextLabel", row)
+    hitsLabel.Size = UDim2.new(0.2, -6, 1, 0)
+    hitsLabel.Position = UDim2.new(0.6, 8, 0, 0)
+    hitsLabel.BackgroundTransparency = 1
+    hitsLabel.Font = Enum.Font.Gotham
+    hitsLabel.TextSize = 13
+    hitsLabel.TextColor3 = Color3.fromRGB(200,200,200)
+    hitsLabel.TextXAlignment = Enum.TextXAlignment.Center
+    hitsLabel.Text = "Hits: " .. tostring(hits)
+
+    local findBtn = Instance.new("TextButton", row)
+    findBtn.Size = UDim2.new(0.2, -10, 0.7, 0)
+    findBtn.Position = UDim2.new(0.8, 8, 0.15, 0)
+    findBtn.BackgroundColor3 = Color3.fromRGB(32,32,36)
+    findBtn.Font = Enum.Font.Gotham
+    findBtn.TextSize = 12
+    findBtn.Text = "Find"
+    local fcorner = Instance.new("UICorner", findBtn)
+    local fstroke = Instance.new("UIStroke", findBtn); registerStroke(fstroke)
+
+    -- find behaviour: highlight the player
+    findBtn.MouseButton1Click:Connect(function()
+        -- attempt to find player by name
+        local pl = Players:FindFirstChild(name)
+        if pl and pl.Character and pl.Character.PrimaryPart then
+            -- highlight using Highlight instance
+            local hl = Instance.new("Highlight")
+            hl.Name = "_ATK_FindHighlight"
+            hl.Adornee = pl.Character
+            hl.Parent = PlayerGui
+            -- color by team if available
+            if pl.TeamColor then hl.FillColor = pl.TeamColor.Color end
+            task.delay(4, function() if hl and hl.Parent then hl:Destroy() end end)
+        end
+    end)
+
+    return row
+end
+
+-- =============
+-- Page: HISTORY
+-- =============
+local historyHeader = Instance.new("TextLabel")
+historyHeader.Size = UDim2.new(1, -12, 0, 28)
+historyHeader.Position = UDim2.new(0, 6, 0, 6)
+historyHeader.BackgroundTransparency = 1
+historyHeader.Text = "History (recent)"
+historyHeader.Font = Enum.Font.GothamBold
+historyHeader.TextSize = 16
+historyHeader.TextColor3 = Color3.fromRGB(230,230,230)
+historyHeader.Parent = Pages.History
+local historyScroll = Instance.new("ScrollingFrame", Pages.History)
+historyScroll.Size = UDim2.new(1, -12, 1, -40)
+historyScroll.Position = UDim2.new(0, 6, 0, 44)
 historyScroll.BackgroundTransparency = 1
-historyScroll.ScrollBarThickness = 6
-historyScroll.Parent = panel
 local historyLayout = Instance.new("UIListLayout", historyScroll)
-historyLayout.Padding = UDim.new(0,4)
+historyLayout.Padding = UDim.new(0,6)
 
--- Small status line
-local statusLine = Instance.new("TextLabel", panel)
-statusLine.Size = UDim2.new(1, -12, 0, 18)
-statusLine.Position = UDim2.new(0, 6, 0, 280)
-statusLine.BackgroundTransparency = 1
-statusLine.Font = Enum.Font.Gotham
-statusLine.TextSize = 12
-statusLine.TextColor3 = Color3.fromRGB(160,160,160)
-statusLine.TextXAlignment = Enum.TextXAlignment.Left
-statusLine.Text = "Tracker active — using heuristics."
+local function makeHistoryRow(item)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -12, 0, 28)
+    lbl.BackgroundTransparency = 0.12
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 13
+    lbl.TextColor3 = Color3.fromRGB(220,220,220)
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    local fromT = os.date("%H:%M:%S", item.timeFirst)
+    local toT = os.date("%H:%M:%S", item.timeLast)
+    lbl.Text = string.format("%s — hits: %d — %s → %s", item.name, item.hits, fromT, toT)
+    lbl.Parent = historyScroll
+end
 
--- Toggle behavior
-toggleBtn.MouseButton1Click:Connect(function()
-    panel.Visible = not panel.Visible
+-- =============
+-- Page: KILL COUNTER
+-- =============
+local kcHeader = Instance.new("TextLabel")
+kcHeader.Size = UDim2.new(1, -12, 0, 28)
+kcHeader.Position = UDim2.new(0, 6, 0, 6)
+kcHeader.BackgroundTransparency = 1
+kcHeader.Text = "Kill Counter (select a player)"
+kcHeader.Font = Enum.Font.GothamBold
+kcHeader.TextSize = 16
+kcHeader.TextColor3 = Color3.fromRGB(230,230,230)
+kcHeader.Parent = Pages.KillCounter
+
+-- live server player list (scroll)
+local kcList = Instance.new("ScrollingFrame", Pages.KillCounter)
+kcList.Size = UDim2.new(1, -12, 1, -120)
+kcList.Position = UDim2.new(0, 6, 0, 44)
+kcList.BackgroundTransparency = 1
+kcList.CanvasSize = UDim2.new(0,0,0,0)
+local kcLayout = Instance.new("UIListLayout", kcList)
+kcLayout.Padding = UDim.new(0,6)
+
+-- selected player info
+local selectedLabel = Instance.new("TextLabel", Pages.KillCounter)
+selectedLabel.Size = UDim2.new(1, -12, 0, 28)
+selectedLabel.Position = UDim2.new(0, 6, 1, -64)
+selectedLabel.BackgroundTransparency = 1
+selectedLabel.Font = Enum.Font.GothamBold
+selectedLabel.TextSize = 14
+selectedLabel.TextColor3 = Color3.fromRGB(235,235,235)
+selectedLabel.Text = "Selected: (none)"
+
+local kdInfo = Instance.new("TextLabel", Pages.KillCounter)
+kdInfo.Size = UDim2.new(1, -12, 0, 28)
+kdInfo.Position = UDim2.new(0, 6, 1, -36)
+kdInfo.BackgroundTransparency = 1
+kdInfo.Font = Enum.Font.Gotham
+kdInfo.TextSize = 13
+kdInfo.TextColor3 = Color3.fromRGB(200,200,200)
+kdInfo.Text = "Kills: 0    Deaths: 0"
+
+local function refreshKillList()
+    -- clear
+    for _,c in ipairs(kcList:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+    local y = 0
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LocalPlayer then
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -8, 0, 30)
+            btn.Position = UDim2.new(0, 4, 0, y)
+            btn.Text = pl.Name
+            btn.Font = Enum.Font.Gotham
+            btn.TextSize = 14
+            btn.TextColor3 = Color3.fromRGB(240,240,240)
+            btn.BackgroundColor3 = Color3.fromRGB(18,18,20)
+            btn.Parent = kcList
+            local corner = Instance.new("UICorner", btn)
+            local stroke = Instance.new("UIStroke", btn); registerStroke(stroke)
+            btn.MouseButton1Click:Connect(function()
+                selectedForKillTrack = pl.Name
+                killTrack[selectedForKillTrack] = killTrack[selectedForKillTrack] or {kills = 0, deaths = 0}
+                selectedLabel.Text = "Selected: " .. selectedForKillTrack
+                kdInfo.Text = string.format("Kills: %d    Deaths: %d", killTrack[selectedForKillTrack].kills or 0, killTrack[selectedForKillTrack].deaths or 0)
+            end)
+            y = y + 36
+        end
+    end
+    kcList.CanvasSize = UDim2.new(0,0,0, y)
+end
+
+Players.PlayerAdded:Connect(refreshKillList)
+Players.PlayerRemoving:Connect(function(pl)
+    if pl.Name == selectedForKillTrack then
+        selectedForKillTrack = nil
+        selectedLabel.Text = "Selected: (none)"
+        kdInfo.Text = "Kills: 0    Deaths: 0"
+    end
+    refreshKillList()
+end)
+refreshKillList()
+
+-- =============
+-- Page: THREATS
+--  - shows up to 10 players split left/right
+--  - calculates threat level by hits & proximity & tools
+-- =============
+local threatsHeader = Instance.new("TextLabel")
+threatsHeader.Size = UDim2.new(1, -12, 0, 28)
+threatsHeader.Position = UDim2.new(0, 6, 0, 6)
+threatsHeader.BackgroundTransparency = 1
+threatsHeader.Text = "Threats"
+threatsHeader.Font = Enum.Font.GothamBold
+threatsHeader.TextSize = 16
+threatsHeader.TextColor3 = Color3.fromRGB(230,230,230)
+threatsHeader.Parent = Pages.Threats
+
+local threatsLeft = Instance.new("Frame", Pages.Threats)
+threatsLeft.Size = UDim2.new(0.5, -8, 1, -44)
+threatsLeft.Position = UDim2.new(0, 6, 0, 44)
+threatsLeft.BackgroundTransparency = 1
+local threatsRight = threatsLeft:Clone()
+threatsRight.Parent = Pages.Threats
+threatsRight.Position = UDim2.new(0.5, 2, 0, 44)
+
+local function computeThreatForPlayer(pl)
+    -- simple scoring:
+    -- hits in recent attackers weight heavily, distance weight, tool presence
+    local score = 0
+    local data = attackers[pl.Name]
+    if data then score = score + data.hits * 2 end
+    local char = pl.Character
+    if char and char:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local d = (char.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+        if d < 10 then score = score + 4
+        elseif d < 25 then score = score + 2
+        elseif d < 60 then score = score + 1 end
+    end
+    for _,c in ipairs(pl.Character and pl.Character:GetChildren() or {}) do
+        if c:IsA("Tool") then score = score + 2; break end
+    end
+    return score
+end
+
+local function threatLabelForScore(score)
+    if score >= 8 then return "Dangerous", Color3.fromRGB(200,20,20) end
+    if score >= 5 then return "High", Color3.fromRGB(230,90,10) end
+    if score >= 3 then return "Medium", Color3.fromRGB(230,200,20) end
+    return "Low", Color3.fromRGB(100,200,100)
+end
+
+local function refreshThreats()
+    -- clear existing children
+    for _,c in ipairs(threatsLeft:GetChildren()) do if c:IsA("TextLabel") or c:IsA("Frame") then c:Destroy() end end
+    for _,c in ipairs(threatsRight:GetChildren()) do if c:IsA("TextLabel") or c:IsA("Frame") then c:Destroy() end end
+
+    local players = {}
+    for _,pl in ipairs(Players:GetPlayers()) do if pl ~= LocalPlayer then table.insert(players, pl) end end
+    table.sort(players, function(a,b) return computeThreatForPlayer(a) > computeThreatForPlayer(b) end)
+
+    for i=1, math.min(10, #players) do
+        local side = (i <= 5) and threatsLeft or threatsRight
+        local idx = ((i-1) % 5)
+        local pl = players[i]
+        local score = computeThreatForPlayer(pl)
+        local lbl, color = threatLabelForScore(score)
+        local text = string.format("%s — Threat: %s", pl.Name, lbl)
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -8, 0, 28)
+        label.Position = UDim2.new(0, 6, 0, idx * 34)
+        label.BackgroundTransparency = 0.12
+        label.Font = Enum.Font.Gotham
+        label.TextSize = 13
+        label.TextColor3 = color
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Text = text
+        label.Parent = side
+        local stroke = Instance.new("UIStroke", label); registerStroke(stroke)
+    end
+end
+
+-- =============
+-- Page: MISC (current attacker details & find button)
+-- =============
+local miscHeader = Instance.new("TextLabel")
+miscHeader.Size = UDim2.new(1, -12, 0, 28)
+miscHeader.Position = UDim2.new(0, 6, 0, 6)
+miscHeader.BackgroundTransparency = 1
+miscHeader.Text = "Misc / Current Attacker"
+miscHeader.Font = Enum.Font.GothamBold
+miscHeader.TextSize = 16
+miscHeader.TextColor3 = Color3.fromRGB(230,230,230)
+miscHeader.Parent = Pages.Misc
+
+local currentLabel = Instance.new("TextLabel", Pages.Misc)
+currentLabel.Size = UDim2.new(1, -12, 0, 24)
+currentLabel.Position = UDim2.new(0, 6, 0, 44)
+currentLabel.BackgroundTransparency = 1
+currentLabel.Font = Enum.Font.Gotham
+currentLabel.TextSize = 14
+currentLabel.TextColor3 = Color3.fromRGB(230,230,230)
+currentLabel.Text = "Current Attacker: (none)"
+
+local statsFrame = Instance.new("Frame", Pages.Misc)
+statsFrame.Size = UDim2.new(1, -12, 0, 100)
+statsFrame.Position = UDim2.new(0, 6, 0, 76)
+statsFrame.BackgroundTransparency = 1
+local leftStats = Instance.new("TextLabel", statsFrame)
+leftStats.Size = UDim2.new(0.5, -6, 1, 0)
+leftStats.Position = UDim2.new(0, 0, 0, 0)
+leftStats.BackgroundTransparency = 1
+leftStats.Font = Enum.Font.Gotham
+leftStats.TextSize = 13
+leftStats.TextColor3 = Color3.fromRGB(210,210,210)
+leftStats.TextXAlignment = Enum.TextXAlignment.Left
+
+local rightStats = leftStats:Clone()
+rightStats.Parent = statsFrame
+rightStats.Position = UDim2.new(0.5, 6, 0, 0)
+rightStats.TextXAlignment = Enum.TextXAlignment.Left
+
+local findAttackerBtn = Instance.new("TextButton", Pages.Misc)
+findAttackerBtn.Size = UDim2.new(0, 160, 0, 36)
+findAttackerBtn.Position = UDim2.new(0.5, -80, 1, -60)
+findAttackerBtn.Text = "Find Attacker"
+findAttackerBtn.Font = Enum.Font.GothamBold
+local findCorner = Instance.new("UICorner", findAttackerBtn)
+local findStroke = Instance.new("UIStroke", findAttackerBtn); registerStroke(findStroke)
+
+local currentAttackerName = nil
+
+findAttackerBtn.MouseButton1Click:Connect(function()
+    if not currentAttackerName then return end
+    local pl = Players:FindFirstChild(currentAttackerName)
+    if pl and pl.Character then
+        local hl = Instance.new("Highlight")
+        hl.Adornee = pl.Character
+        hl.Parent = PlayerGui
+        if pl.TeamColor then hl.FillColor = pl.TeamColor.Color end
+        task.delay(5, function() if hl and hl.Parent then hl:Destroy() end end)
+    end
 end)
 
--- Small helper to create list entry
-local function makeLiveEntry(name, hits, timeLeft)
-    local btn = Instance.new("Frame")
-    btn.Size = UDim2.new(1, -12, 0, 28)
-    btn.BackgroundTransparency = 0.12
-    btn.BorderSizePixel = 0
-    btn.Parent = liveScroll
-    local t = Instance.new("TextLabel", btn)
-    t.Size = UDim2.new(1, -8, 1, 0)
-    t.Position = UDim2.new(0, 6, 0, 0)
-    t.BackgroundTransparency = 1
-    t.Font = Enum.Font.Gotham
-    t.TextSize = 13
-    t.TextColor3 = Color3.fromRGB(230,230,230)
-    t.TextXAlignment = Enum.TextXAlignment.Left
-    t.Text = string.format("%s — hits: %d — expires in: %ds", name, hits, timeLeft)
-    return btn
+-- =============
+-- Small animated notification helper (used when opening/closing via chat)
+-- =============
+local function smallNotice(text, duration)
+    duration = duration or 1.6
+    local fg = Instance.new("Frame", screen)
+    fg.Size = UDim2.new(0, 260, 0, 60)
+    fg.Position = UDim2.new(0.5, -130, 0.12, 0)
+    fg.AnchorPoint = Vector2.new(0.5, 0)
+    fg.BackgroundColor3 = Color3.fromRGB(18,18,22)
+    local rc = Instance.new("UICorner", fg); rc.CornerRadius = UDim.new(0,10)
+    local st = Instance.new("UIStroke", fg); registerStroke(st)
+    local lbl = Instance.new("TextLabel", fg)
+    lbl.Size = UDim2.new(1, -12, 1, -12)
+    lbl.Position = UDim2.new(0, 6, 0, 6)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 16
+    lbl.TextColor3 = Color3.fromRGB(230,230,230)
+    lbl.Text = text
+
+    -- animate in / out
+    fg.Position = UDim2.new(0.5, -130, -0.2, 0)
+    fg:TweenPosition(UDim2.new(0.5, -130, 0.12, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.28, true)
+    task.delay(duration, function()
+        fg:TweenPosition(UDim2.new(0.5, -130, -0.2, 0), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.28, true)
+        task.delay(0.28, function() if fg and fg.Parent then fg:Destroy() end end)
+    end)
 end
 
-local function makeHistoryEntry(name, hits, firstTS, lastTS)
-    local btn = Instance.new("TextLabel")
-    btn.Size = UDim2.new(1, -12, 0, 22)
-    btn.BackgroundTransparency = 0.2
-    btn.TextXAlignment = Enum.TextXAlignment.Left
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 12
-    btn.TextColor3 = Color3.fromRGB(200,200,200)
-    local first = os.date("%X", firstTS)
-    local last = os.date("%X", lastTS)
-    btn.Text = string.format("%s — hits: %d — %s → %s", name, hits, first, last)
-    btn.Parent = historyScroll
-    return btn
+-- =============
+-- Open / close animation & chat command
+-- =============
+local function openTracker()
+    smallNotice("Opening tracker...")
+    task.delay(0.65, function()
+        main.Visible = true
+        main:TweenPosition(UDim2.new(0.5, 0, 0.5, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.35, true)
+    end)
+end
+local function closeTracker()
+    smallNotice("Closing tracker...")
+    task.delay(0.65, function()
+        main:TweenPosition(UDim2.new(0.5, 0, -1.2, 0), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.35, true)
+        task.delay(0.36, function() main.Visible = false end)
+    end)
+end
+local function toggleTracker()
+    if not main.Visible or main.Position.Y.Scale < 0 then openTracker() else closeTracker() end
 end
 
--- Update UI
-local function refreshUI()
-    -- clear live
-    for _,c in ipairs(liveScroll:GetChildren()) do if c:IsA("Frame") or c:IsA("TextLabel") then c:Destroy() end end
-    -- fill
-    local now = os.time()
-    local count = 0
-    for name,data in pairs(attackers) do
-        local timeLeft = math.max(0, INACTIVITY_TIMEOUT - (now - data.lastHit))
-        makeLiveEntry(name, data.hits, timeLeft)
-        count = count + 1
-    end
-    liveLabel.Text = "Live Attackers — Count: " .. tostring(count)
-    toggleBtn.Text = "Attackers: " .. tostring(count)
-
-    -- refresh history (show up to 20 recent)
-    for _,c in ipairs(historyScroll:GetChildren()) do if c:IsA("TextLabel") then c:Destroy() end end
-    local shown = 0
-    for i=1, math.min(#history, 20) do
-        local item = history[i]
-        makeHistoryEntry(item.name, item.hits, item.timeFirst, item.timeLast)
-        shown = shown + 1
-    end
+-- chat handling: use TextChatService if present, else fall back to Player.Chatted
+if TextChatService and TextChatService.MessageReceived then
+    TextChatService.MessageReceived:Connect(function(msg)
+        local source = nil
+        pcall(function() source = msg.TextSource end)
+        local fromLocal = false
+        if source then
+            if pcall(function() return source.Name end) and source.Name == LocalPlayer.Name then fromLocal = true end
+            if not fromLocal and pcall(function() return source.UserId end) and source.UserId == LocalPlayer.UserId then fromLocal = true end
+        end
+        if not fromLocal then return end
+        local txt = (msg.Text or ""):lower():gsub("^%s*(.-)%s*$","%1")
+        if txt == "/tracker" or txt == "/trackeropen" then openTracker()
+        elseif txt == "/trackerclose" then closeTracker() end
+    end)
+else
+    -- fallback
+    LocalPlayer.Chatted:Connect(function(msg)
+        local txt = (msg or ""):lower():gsub("^%s*(.-)%s*$","%1")
+        if txt == "/tracker" or txt == "/trackeropen" then openTracker()
+        elseif txt == "/trackerclose" then closeTracker() end
+    end)
 end
 
--- Periodic housekeeping + UI tick
+-- initial visibility
+main.Visible = false
+
+-- ====================
+-- UI update loop: refresh pages from data structures
+-- ====================
 spawn(function()
     while screen.Parent do
+        -- housekeeping
         cleanupInactive()
-        refreshUI()
-        task.wait(POLL_INTERVAL)
+
+        -- refresh Tracker page list
+        for _, c in ipairs(liveScroll:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+        local nowt = now()
+        local liveCount = 0
+        for name, data in pairs(attackers) do
+            local timeLeft = math.max(0, INACTIVITY_TIMEOUT - (nowt - data.lastHit))
+            local row = makeLiveRow(name, data.hits, timeLeft)
+            row.Parent = liveScroll
+            liveCount = liveCount + 1
+        end
+        liveScroll.CanvasSize = UDim2.new(0, 0, 0, (#liveScroll:GetChildren()) * 44)
+
+        -- refresh history page (show top 50)
+        for _, c in ipairs(historyScroll:GetChildren()) do if c:IsA("TextLabel") then c:Destroy() end end
+        for i=1, math.min(50, #history) do
+            makeHistoryRow(history[i])
+        end
+
+        -- refresh kill counter info for selected player
+        if selectedForKillTrack then
+            local info = killTrack[selectedForKillTrack] or {kills = 0, deaths = 0}
+            kdInfo.Text = string.format("Kills: %d    Deaths: %d", info.kills or 0, info.deaths or 0)
+            selectedLabel.Text = "Selected: " .. selectedForKillTrack
+        end
+
+        -- refresh threats
+        refreshThreats()
+
+        -- refresh misc current attacker & stats
+        -- pick the most-recent attacker if any
+        local mostRecentName, mostRecentTime = nil, -1
+        for name,data in pairs(attackers) do
+            if data.lastHit and data.lastHit > mostRecentTime then
+                mostRecentTime, mostRecentName = data.lastHit, name
+            end
+        end
+        currentAttackerName = mostRecentName
+        if currentAttackerName then
+            currentLabel.Text = "Current Attacker: " .. tostring(currentAttackerName)
+            local pl = Players:FindFirstChild(currentAttackerName)
+            if pl and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local dist = math.floor((pl.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude)
+                local ws, jp = "N/A", "N/A"
+                local hum = pl.Character:FindFirstChildOfClass("Humanoid")
+                if hum then ws = tostring(math.floor(hum.WalkSpeed or 0)) jp = tostring(math.floor(hum.JumpPower or hum.JumpHeight or 0)) end
+                leftStats.Text = string.format("WalkSpeed: %s\nJumpPower: %s\nDistance: %d studs", ws, jp, dist)
+                -- attempt to list tools used (if present)
+                local toolsUsed = {}
+                for _, c in ipairs(pl.Character:GetChildren()) do if c:IsA("Tool") then table.insert(toolsUsed, c.Name) end end
+                if #toolsUsed == 0 then rightStats.Text = "Tools: (none detected)\nDamage: (n/a)" else rightStats.Text = "Tools: "..table.concat(toolsUsed, ", ").."\nDamage: (n/a)" end
+            else
+                leftStats.Text = "WalkSpeed: N/A\nJumpPower: N/A\nDistance: N/A"
+                rightStats.Text = "Tools: N/A\nDamage: N/A"
+            end
+        else
+            currentLabel.Text = "Current Attacker: (none)"
+            leftStats.Text = ""
+            rightStats.Text = ""
+        end
+
+        -- refresh kill list player buttons periodically
+        refreshKillList()
+
+        task.wait(UI_POLL)
     end
 end)
 
--- Expose some functions for quick testing in console
+-- ====================
+-- Public API & debugging helpers
+-- ====================
 _G.AttackerTracker = {
     Register = registerAttacker,
     Archive = archiveAttacker,
     GetCurrent = function() local t={} for k,v in pairs(attackers) do t[k]=v end return t end,
-    GetHistory = function() return history end
+    GetHistory = function() return history end,
+    Open = openTracker,
+    Close = closeTracker,
+    Toggle = toggleTracker,
+    SetSelectedKillTarget = function(name)
+        if not name then selectedForKillTrack = nil; return end
+        if Players:FindFirstChild(name) then
+            selectedForKillTrack = name
+            killTrack[selectedForKillTrack] = killTrack[selectedForKillTrack] or {kills = 0, deaths = 0}
+        end
+    end,
+    ResetAll = function()
+        attackers = {}
+        history = {}
+        recentHits = {}
+        killTrack = {}
+        selectedForKillTrack = nil
+    end
 }
 
-print("[AttackerTracker] Initialized. GUI toggle at top-left. Uses FightEvent if available.")
+print("[AttackerTracker] Initialized. Use /tracker to open.")
