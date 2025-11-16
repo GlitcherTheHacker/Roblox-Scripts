@@ -1,79 +1,126 @@
---// SERVICES //--
+-- Loopbring GUI
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
-local GuideRemote = ReplicatedStorage:FindFirstChild("Guide")
-
---// SHARED LOOPBRING TARGET LIST //--
-bringTargets = bringTargets or {} -- Shared globally
-
+local bringTargets = {}
 local distance = 2
 
---  GUI BUILD
- 
+-- GUI Setup
 local gui = Instance.new("ScreenGui")
 gui.Name = "LoopbringGUI"
 gui.ResetOnSpawn = false
 gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
+-- Colors
+local baseColor = Color3.fromRGB(0, 0, 0)
+local rainbowStroke = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+	ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 127, 0)),
+	ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 255, 0)),
+	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(0, 255, 0)),
+	ColorSequenceKeypoint.new(0.8, Color3.fromRGB(0, 127, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(170, 0, 255))
+})
+
+local function applyStroke(obj, thickness)
+	local stroke = Instance.new("UIStroke", obj)
+	stroke.Thickness = thickness
+	stroke.Color = Color3.fromRGB(255, 0, 200)
+	stroke.Color = Color3.fromHSV(tick() % 1, 1, 1) -- live rainbow effect
+	task.spawn(function()
+		while stroke and stroke.Parent do
+			stroke.Color = Color3.fromHSV((tick()*0.35) % 1, 1, 1)
+			task.wait(0.05)
+		end
+	end)
+end
+
+-- Toggle Button (floating orb)
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Parent = gui
-toggleBtn.Size = UDim2.new(0, 40, 0, 40)
-toggleBtn.Position = UDim2.new(1, -50, 0, 100)
+toggleBtn.Size = UDim2.new(0, 46, 0, 46)
+toggleBtn.Position = UDim2.new(1, -70, 0, 120)
 toggleBtn.Text = "⇩"
 toggleBtn.TextScaled = true
 toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
+toggleBtn.BackgroundColor3 = baseColor
 toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
 
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
+applyStroke(toggleBtn, 3)
+
+-- Main Frame
 local frame = Instance.new("Frame")
 frame.Parent = gui
-frame.Position = UDim2.new(1, -250, 0, 145)
-frame.Size = UDim2.new(0, 220, 0, 310)
-frame.BackgroundColor3 = Color3.fromRGB(25, 5, 5)
+frame.Position = UDim2.new(1, -280, 0, 170)
+frame.Size = UDim2.new(0, 240, 0, 280)
+frame.BackgroundColor3 = baseColor
 frame.Visible = false
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
-Instance.new("UIStroke", frame).Color = Color3.fromRGB(200, 0, 0)
 
---  PLAYER BUTTON LIST
- 
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 14)
+applyStroke(frame, 3)
+
+-- Header
 local header = Instance.new("Frame", frame)
 header.Size = UDim2.new(1, 0, 0, 40)
 header.BackgroundTransparency = 1
 
+local minusBtn = Instance.new("TextButton", header)
+minusBtn.Size = UDim2.new(0, 40, 1, 0)
+minusBtn.Text = "-"
+minusBtn.Font = Enum.Font.GothamBold
+minusBtn.TextScaled = true
+minusBtn.BackgroundColor3 = baseColor
+minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0, 8)
+applyStroke(minusBtn, 2)
+
 local distanceLabel = Instance.new("TextLabel", header)
-distanceLabel.Size = UDim2.new(1, 0, 1, 0)
+distanceLabel.Size = UDim2.new(1, -80, 1, 0)
+distanceLabel.Position = UDim2.new(0, 40, 0, 0)
 distanceLabel.Text = "Distance: " .. distance
-distanceLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
+distanceLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 distanceLabel.TextScaled = true
 distanceLabel.Font = Enum.Font.GothamBold
 distanceLabel.BackgroundTransparency = 1
 
+local plusBtn = minusBtn:Clone()
+plusBtn.Text = "+"
+plusBtn.Parent = header
+plusBtn.Position = UDim2.new(1, -40, 0, 0)
+
+-- Player List
 local scroll = Instance.new("ScrollingFrame", frame)
 scroll.Position = UDim2.new(0, 0, 0, 50)
-scroll.Size = UDim2.new(1, 0, 1, -100)
+scroll.Size = UDim2.new(1, 0, 1, -50)
 scroll.BackgroundTransparency = 1
 scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-scroll.ScrollBarThickness = 5
+scroll.ScrollBarThickness = 4
 
 local layout = Instance.new("UIListLayout", scroll)
-layout.Padding = UDim.new(0, 3)
+layout.Padding = UDim.new(0, 4)
 
---  LOOPBRING CORE
- 
-local function updateTeleport()
+-- Core Logic (Character-only bring)
+local function hideNonCharacterItems(char)
+	for _, item in ipairs(char:GetChildren()) do
+		if item:IsA("Tool") or item:IsA("Accessory") or item:IsA("Hat") or item:IsA("Model") then
+			item.Parent = nil
+		end
+	end
+end
+
+local function updateTeleportation()
 	local myChar = LocalPlayer.Character
 	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
 	if not myRoot then return end
 
 	for _, name in ipairs(bringTargets) do
-		local plr = Players:FindFirstChild(name)
-		if plr and plr.Character then
-			local char = plr.Character
-			local root = char:FindFirstChild("HumanoidRootPart")
+		local p = Players:FindFirstChild(name)
+		if p and p.Character then
+			local root = p.Character:FindFirstChild("HumanoidRootPart")
 			if root then
-				root.CFrame = CFrame.new(myRoot.Position + myRoot.CFrame.LookVector * distance)
+				hideNonCharacterItems(p.Character)
+				local newPos = myRoot.Position + myRoot.CFrame.LookVector * distance
+				root.CFrame = CFrame.new(newPos, myRoot.Position) * CFrame.Angles(0, math.rad(180), 0)
 			end
 		end
 	end
@@ -82,13 +129,12 @@ end
 local function loopBring(name)
 	if table.find(bringTargets, name) then return end
 	table.insert(bringTargets, name)
-
-	task.spawn(function()
+	coroutine.wrap(function()
 		while table.find(bringTargets, name) do
-			updateTeleport()
+			updateTeleportation()
 			task.wait(0.05)
 		end
-	end)
+	end)()
 end
 
 local function stopBring(name)
@@ -96,8 +142,7 @@ local function stopBring(name)
 	if i then table.remove(bringTargets, i) end
 end
 
---  GUI LIST
- 
+-- Player List Refresh
 local function refreshList()
 	for _, c in ipairs(scroll:GetChildren()) do
 		if c:IsA("TextButton") then c:Destroy() end
@@ -106,62 +151,77 @@ local function refreshList()
 		if p ~= LocalPlayer then
 			local btn = Instance.new("TextButton")
 			btn.Parent = scroll
-			btn.Size = UDim2.new(1, -8, 0, 28)
+			btn.Size = UDim2.new(1, -8, 0, 32)
 			btn.Text = p.Name
 			btn.Font = Enum.Font.Gotham
 			btn.TextScaled = true
-			btn.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
+			btn.BackgroundColor3 = baseColor
 			btn.TextColor3 = table.find(bringTargets, p.Name)
-				and Color3.fromRGB(255, 80, 80)
+				and Color3.fromRGB(255, 255, 255)
 				or Color3.fromRGB(0, 255, 0)
-			Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+			Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+			applyStroke(btn, 2)
+
 			btn.MouseButton1Click:Connect(function()
-				if table.find(bringTargets, p.Name) then stopBring(p.Name) else loopBring(p.Name) end
+				if table.find(bringTargets, p.Name) then
+					stopBring(p.Name)
+				else
+					loopBring(p.Name)
+				end
 				refreshList()
 			end)
 		end
 	end
-	scroll.CanvasSize = UDim2.new(0, 0, 0, #Players:GetPlayers() * 32)
+	scroll.CanvasSize = UDim2.new(0, 0, 0, #Players:GetPlayers() * 36)
 end
 
-refreshList()
 Players.PlayerAdded:Connect(refreshList)
-Players.PlayerRemoving:Connect(function(p) stopBring(p.Name) refreshList() end)
+Players.PlayerRemoving:Connect(function(p)
+	stopBring(p.Name)
+	refreshList()
+end)
 
---  ✅ ENEMY LAG BURST BUTTON ADDED HERE
- 
-local lagBtn = Instance.new("TextButton", frame)
-lagBtn.Size = UDim2.new(1, -8, 0, 40)
-lagBtn.Position = UDim2.new(0, 4, 1, -45)
-lagBtn.Text = "⚡ LAG ENEMIES"
-lagBtn.TextScaled = true
-lagBtn.Font = Enum.Font.GothamBold
-lagBtn.BackgroundColor3 = Color3.fromRGB(120, 0, 0)
-lagBtn.TextColor3 = Color3.new(1, 1, 1)
-Instance.new("UICorner", lagBtn).CornerRadius = UDim.new(0, 8)
+-- Dragging
+local dragging, dragInput, dragStart, startPos
 
-local function lagEnemies()
-	if not GuideRemote then return warn("No Guide remote found!") end
-	if #bringTargets == 0 then return warn("No loopbrung players to lag!") end
-
-	print("⚠ Lag burst activated!")
-	local start = tick()
-	while tick() - start < 4 do
-		for _, enemyName in ipairs(bringTargets) do
-			local enemy = Players:FindFirstChild(enemyName)
-			if enemy then pcall(function() GuideRemote:FireServer(enemy) end) end
-		end
-		task.wait(0.01)
+local function updatePosition(input)
+	if dragging then
+		local delta = input.Position - dragStart
+		toggleBtn.Position = UDim2.new(
+			startPos.X.Scale, startPos.X.Offset + delta.X,
+			startPos.Y.Scale, startPos.Y.Offset + delta.Y
+		)
+		frame.Position = UDim2.new(
+			0, toggleBtn.AbsolutePosition.X - frame.AbsoluteSize.X - 10,
+			0, toggleBtn.AbsolutePosition.Y
+		)
 	end
-	print("✅ Lag burst finished.")
 end
 
-lagBtn.MouseButton1Click:Connect(lagEnemies)
+toggleBtn.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = toggleBtn.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then dragging = false end
+		end)
+	end
+end)
+toggleBtn.InputChanged:Connect(updatePosition)
 
---  UI TOGGLE
-
+-- UI Hook
 toggleBtn.MouseButton1Click:Connect(function()
 	frame.Visible = not frame.Visible
 end)
+plusBtn.MouseButton1Click:Connect(function()
+	distance += 1
+	distanceLabel.Text = "Distance: " .. distance
+end)
+minusBtn.MouseButton1Click:Connect(function()
+	distance = math.max(1, distance - 1)
+	distanceLabel.Text = "Distance: " .. distance
+end)
 
-print("Loopbring Initilized - Use The new Lag burst Section to try and escape enemy grasp")
+refreshList()
