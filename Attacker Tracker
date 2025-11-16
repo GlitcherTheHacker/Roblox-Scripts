@@ -1,4 +1,5 @@
--- Attacker Tracker v2
+-- Attacker Tracker v2 (UI + reliability fixes)
+-- Rewritten UI layout & robustness while keeping your detection logic intact
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -21,19 +22,20 @@ local KILL_DETECTION_WINDOW = 6     -- seconds to wait between hit and death to 
 local UI_BASE_W, UI_BASE_H = 420, 340
 
 -- ====================
--- Utilities & detection helpers
+-- Utilities & detection helpers (unchanged logic)
 -- ====================
 local function safeFindFightRemote()
-    -- tries to find a commonly named remote in ReplicatedStorage
     local candidates = {"FightEvent", "FightRemote", "DamageEvent", "HitEvent"}
     for _, name in ipairs(candidates) do
         local r = ReplicatedStorage:FindFirstChild(name)
         if r and r:IsA("RemoteEvent") then return r end
     end
-    -- fallback: shallow scan
     for _, v in ipairs(ReplicatedStorage:GetChildren()) do
-        if v:IsA("RemoteEvent") and tostring(v.Name):lower():match("fight") or tostring(v.Name):lower():match("hit") then
-            return v
+        if v:IsA("RemoteEvent") then
+            local n = tostring(v.Name):lower()
+            if n:match("fight") or n:match("hit") or n:match("damage") then
+                return v
+            end
         end
     end
     return nil
@@ -41,16 +43,12 @@ end
 
 local FightRemote = safeFindFightRemote()
 
-local function now()
-    return os.clock()
-end
+local function now() return os.clock() end
 
--- attackers[name] = { lastHit = os.clock(), hits = n, firstSeen = ts }
 local attackers = {}
-local history = {} -- array of {name, timeFirst, timeLast, hits}
-local recentHits = {} -- recentHits[targetName] = { attacker = "You" or "Name", ts = os.clock() } for kill heuristics
+local history = {}
+local recentHits = {}
 
--- helper: register or refresh an attacker
 local function registerAttacker(name)
     if not name or name == "" then return end
     local t = now()
@@ -63,7 +61,6 @@ local function registerAttacker(name)
     end
 end
 
--- move attacker to history
 local function archiveAttacker(name)
     local entry = attackers[name]
     if not entry then return end
@@ -77,7 +74,6 @@ local function archiveAttacker(name)
     attackers[name] = nil
 end
 
--- housekeeping: remove stale attackers
 local function cleanupInactive()
     local t = now()
     for name, data in pairs(attackers) do
@@ -87,7 +83,6 @@ local function cleanupInactive()
     end
 end
 
--- try to extract player name from various payload shapes
 local function extractNameFromPayload(a)
     if not a then return nil end
     if typeof(a) == "Instance" and a:IsA("Player") then return a.Name end
@@ -100,13 +95,11 @@ local function extractNameFromPayload(a)
     return nil
 end
 
--- Heuristics: find "creator" tags anywhere in workspace (not limited by distance)
 local function findCreatorTagAnywhere()
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") or obj:IsA("Model") then
             local creator = obj:FindFirstChild("creator") or obj:FindFirstChild("Creator") or obj:FindFirstChild("Owner")
             if creator and creator.Value then
-                -- creator may be Player instance or string
                 if typeof(creator.Value) == "Instance" and creator.Value:IsA("Player") then
                     return creator.Value.Name
                 elseif type(creator.Value) == "string" then
@@ -118,7 +111,6 @@ local function findCreatorTagAnywhere()
     return nil
 end
 
--- Heuristic scanning by proximity (fallback)
 local function scanClosestPlayer()
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
@@ -138,41 +130,30 @@ local function scanClosestPlayer()
     return best and best.Name or nil
 end
 
--- =============
--- FightRemote primary detection
--- =============
+-- FightRemote listening
 if FightRemote and FightRemote:IsA("RemoteEvent") then
     pcall(function()
         FightRemote.OnClientEvent:Connect(function(...)
-            -- robust extraction
             local args = {...}
             local attackerName = extractNameFromPayload(args[1]) or extractNameFromPayload(args[2])
-            if attackerName then
-                registerAttacker(attackerName)
-            end
+            if attackerName then registerAttacker(attackerName) end
 
-            -- if the payload contains victim and attacker shape, also record 'recentHits' for kill heuristics
-            -- many fight remotes use (attacker, victim) or {attacker=...,victim=...}
             local victimName
             if #args >= 2 then
                 if typeof(args[2]) == "Instance" and args[2]:IsA("Player") then victimName = args[2].Name end
                 if type(args[2]) == "string" then victimName = args[2] end
             end
             if victimName and attackerName and victimName == LocalPlayer.Name then
-                -- someone hit you
                 registerAttacker(attackerName)
             end
             if victimName and attackerName and attackerName == LocalPlayer.Name then
-                -- we hit someone — store for kill heuristics (credited if they die soon after)
                 recentHits[victimName] = now()
             end
         end)
     end)
 end
 
--- =============
--- Health watcher — fallback detection when FightRemote not available or incomplete
--- =============
+-- Health watcher fallback
 local lastHealth = nil
 local function hookHealth()
     local char = LocalPlayer.Character
@@ -183,14 +164,7 @@ local function hookHealth()
     humanoid:GetPropertyChangedSignal("Health"):Connect(function()
         local new = humanoid.Health
         if new < (lastHealth or new) then
-            -- Health decreased: attempt to find attacker via multiple heuristics
-            local name = findCreatorTagAnywhere()
-            if not name then
-                name = scanClosestPlayer()
-            end
-            if not name then
-                name = "Unknown"
-            end
+            local name = findCreatorTagAnywhere() or scanClosestPlayer() or "Unknown"
             registerAttacker(name)
         end
         lastHealth = new
@@ -198,26 +172,16 @@ local function hookHealth()
 end
 
 Players.LocalPlayer.CharacterAdded:Connect(function()
-    -- small delay to ensure humanoid exists
     task.wait(0.4)
     pcall(hookHealth)
 end)
-if Players.LocalPlayer.Character then
-    pcall(hookHealth)
-end
+if Players.LocalPlayer.Character then pcall(hookHealth) end
 
--- =============
--- Kill / death detection (for Kill Counter page)
--- approach:
---  - track recentHits[victimName] when we damage them (via FightRemote)
---  - connect to all players' humanoid.Died and check creator tags or recentHits to credit local-kill
---  - for deaths vs selected target: when LocalPlayer dies, try to identify killer using creator tags or heuristics
--- =============
-local killTrack = {} -- killTrack[selectedName] = {kills = n, deaths = m}
+-- Kill / death detection (kept mostly as-is)
+local killTrack = {}
 local selectedForKillTrack = nil
 
 local function ensurePlayerCharacterConnections(pl)
-    -- attaches a Died listener on the player's humanoid to detect kills
     if not pl or not pl:IsA("Player") then return end
     local function onChar(char)
         local humanoid = char:FindFirstChildOfClass("Humanoid")
@@ -226,8 +190,6 @@ local function ensurePlayerCharacterConnections(pl)
             if not humanoid then return end
         end
         humanoid.Died:Connect(function()
-            -- who killed this player?
-            -- 1) creator tag on humanoid or model
             local killerName = nil
             local creator = humanoid:FindFirstChild("creator") or humanoid:FindFirstChild("Creator")
             if creator and creator.Value then
@@ -237,30 +199,21 @@ local function ensurePlayerCharacterConnections(pl)
                     killerName = creator.Value
                 end
             end
-
-            -- 2) if we have recentHits[victim], credit last hitter
             if not killerName then
                 local last = recentHits[pl.Name]
                 if last and now() - last <= KILL_DETECTION_WINDOW then
-                    killerName = LocalPlayer.Name -- recentHits were recorded only for local player's hits
+                    killerName = LocalPlayer.Name
                 end
             end
-
-            -- 3) try find nearby creator tags (global search)
             if not killerName then
                 killerName = findCreatorTagAnywhere()
             end
-
-            -- If the dead player was the selected tracking target, and the killer was us, increment our kills
             if selectedForKillTrack and pl.Name == selectedForKillTrack then
                 if killerName == LocalPlayer.Name then
                     killTrack[selectedForKillTrack] = killTrack[selectedForKillTrack] or {kills = 0, deaths = 0}
                     killTrack[selectedForKillTrack].kills = (killTrack[selectedForKillTrack].kills or 0) + 1
                 end
             end
-
-            -- If the killer was the selected player and victim was LocalPlayer, increment deaths
-            -- This handled in LocalPlayer death watcher below
         end)
     end
 
@@ -268,20 +221,15 @@ local function ensurePlayerCharacterConnections(pl)
     pl.CharacterAdded:Connect(onChar)
 end
 
--- connect to all players' character deaths
-for _, pl in ipairs(Players:GetPlayers()) do
-    ensurePlayerCharacterConnections(pl)
-end
+for _, pl in ipairs(Players:GetPlayers()) do ensurePlayerCharacterConnections(pl) end
 Players.PlayerAdded:Connect(function(pl) ensurePlayerCharacterConnections(pl) end)
 
--- LocalPlayer death watcher to credit if selected player killed you
 local function hookLocalDeath()
     local char = LocalPlayer.Character
     if not char then return end
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not humanoid then return end
     humanoid.Died:Connect(function()
-        -- try find killer
         local killerName = nil
         local creator = humanoid:FindFirstChild("creator") or humanoid:FindFirstChild("Creator")
         if creator and creator.Value then
@@ -291,12 +239,8 @@ local function hookLocalDeath()
                 killerName = creator.Value
             end
         end
-        if not killerName then
-            killerName = findCreatorTagAnywhere()
-        end
-        if not killerName then
-            killerName = "Unknown"
-        end
+        if not killerName then killerName = findCreatorTagAnywhere() end
+        if not killerName then killerName = "Unknown" end
 
         if selectedForKillTrack and killerName == selectedForKillTrack then
             killTrack[selectedForKillTrack] = killTrack[selectedForKillTrack] or {kills = 0, deaths = 0}
@@ -312,7 +256,7 @@ end)
 if Players.LocalPlayer.Character then pcall(hookLocalDeath) end
 
 -- ====================
--- UI: main window, pages, rainbow stroke animation
+-- UI: main window, pages, rainbow stroke animation (REWRITTEN FOR STABILITY)
 -- ====================
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 if PlayerGui:FindFirstChild("AttackerTrackerGui") then PlayerGui.AttackerTrackerGui:Destroy() end
@@ -323,26 +267,29 @@ screen.ResetOnSpawn = false
 screen.Parent = PlayerGui
 screen.DisplayOrder = 500
 
--- mobile-autoscale
-local uiScale = Instance.new("UIScale", screen)
+-- mobile-autoscale (cleaner)
+local uiScale = Instance.new("UIScale")
+uiScale.Parent = screen
 local function computeScale()
     local vp = Camera and Camera.ViewportSize or Vector2.new(1280,720)
     local minDim = math.min(vp.X, vp.Y)
     if UserInputService.TouchEnabled then
         return math.clamp(minDim / 900, 0.56, 0.95)
     else
-        return math.clamp(minDim / 1200, 0.9, 1.06)
+        return math.clamp(minDim / 1200, 0.92, 1.04)
     end
 end
 uiScale.Scale = computeScale()
-workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function() uiScale.Scale = computeScale() end)
-if Camera then Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function() uiScale.Scale = computeScale() end) end
+if Camera then
+    Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function() uiScale.Scale = computeScale() end)
+end
+UserInputService:GetPropertyChangedSignal("TouchEnabled"):Connect(function() uiScale.Scale = computeScale() end)
 
 -- rainbow stroke registry
 local rainbowStrokes = {}
 local function registerStroke(s) if s then table.insert(rainbowStrokes, s) end end
 local function hsv(h,s,v) return Color3.fromHSV((h%1), s, v) end
-spawn(function()
+task.spawn(function()
     while screen.Parent do
         local base = (tick() * 0.18) % 1
         local n = #rainbowStrokes
@@ -358,18 +305,18 @@ spawn(function()
     end
 end)
 
--- main container
+-- main container (centered)
 local main = Instance.new("Frame")
 main.Name = "Main"
 main.Size = UDim2.new(0, UI_BASE_W, 0, UI_BASE_H)
-main.Position = UDim2.new(0.5, 0, -1.2, 0) -- off-screen start
+main.Position = UDim2.new(0.5, 0, 0.5, 0)
 main.AnchorPoint = Vector2.new(0.5, 0.5)
 main.BackgroundColor3 = Color3.fromRGB(18,18,22)
 main.Parent = screen
 local mainCorner = Instance.new("UICorner", main); mainCorner.CornerRadius = UDim.new(0, 10)
 local mainStroke = Instance.new("UIStroke", main); mainStroke.Thickness = 2; registerStroke(mainStroke)
 
--- header
+-- header (kept simple)
 local header = Instance.new("Frame", main)
 header.Size = UDim2.new(1, 0, 0, 56)
 header.Position = UDim2.new(0, 0, 0, 0)
@@ -387,7 +334,6 @@ title.TextColor3 = Color3.fromRGB(230,230,230)
 title.Text = "Attacker Tracking Hub"
 local titleStroke = Instance.new("UIStroke", title); titleStroke.Thickness = 1; registerStroke(titleStroke)
 
--- small subtitle to the right of the title (moved for better visibility)
 local subtitle = Instance.new("TextLabel", header)
 subtitle.Size = UDim2.new(0.4, -20, 1, 0)
 subtitle.Position = UDim2.new(0.6, 0, 0, 0)
@@ -399,9 +345,10 @@ subtitle.TextColor3 = Color3.fromRGB(190,190,190)
 subtitle.Text = "Live — Press /tracker to open"
 local subtitleStroke = Instance.new("UIStroke", subtitle); subtitleStroke.Thickness = 1; registerStroke(subtitleStroke)
 
--- left navigation (small vertical button strip)
+-- left navigation
+local NAV_W = 96
 local nav = Instance.new("Frame", main)
-nav.Size = UDim2.new(0, 96, 1, -56)
+nav.Size = UDim2.new(0, NAV_W, 1, -56)
 nav.Position = UDim2.new(0, 0, 0, 56)
 nav.BackgroundColor3 = Color3.fromRGB(20,20,24)
 local navCorner = Instance.new("UICorner", nav); navCorner.CornerRadius = UDim.new(0, 8)
@@ -409,25 +356,36 @@ local navStroke = Instance.new("UIStroke", nav); navStroke.Thickness = 1; regist
 
 -- pages area
 local content = Instance.new("Frame", main)
-content.Size = UDim2.new(1, -96, 1, -56)
-content.Position = UDim2.new(0, 96, 0, 56)
+content.Size = UDim2.new(1, -NAV_W, 1, -56)
+content.Position = UDim2.new(0, NAV_W, 0, 56)
 content.BackgroundTransparency = 1
 
--- page creation helper
+-- page creation helper (pages start hidden; we manage visibility)
 local Pages = {}
 local currentPage = nil
 local function createPage(name)
     local p = Instance.new("ScrollingFrame")
     p.Name = name
     p.Size = UDim2.new(1, 0, 1, 0)
-    p.Position = UDim2.new(1, 0, 0, 0)
+    p.Position = UDim2.new(0, 0, 0, 0)
     p.BackgroundTransparency = 1
     p.CanvasSize = UDim2.new(0,0,0,0)
-    p.AutomaticCanvasSize = Enum.AutomaticSize.Y
     p.ScrollBarThickness = 6
+    p.AutomaticCanvasSize = Enum.AutomaticSize.None
     p.Parent = content
+    p.Visible = false
+
+    -- content layout (vertical)
     local layout = Instance.new("UIListLayout", p)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0,8)
+
+    -- connect layout size -> CanvasSize
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        local y = layout.AbsoluteContentSize.Y
+        p.CanvasSize = UDim2.new(0, 0, 0, y + 8)
+    end)
+
     return p
 end
 
@@ -437,23 +395,19 @@ local function showPage(name)
     local new = Pages[name]
     if not new then return end
     currentPage = name
-    -- animate
     if old then
-        spawn(function() -- slide old out left
-            old:TweenPosition(UDim2.new(-1,0,0,0), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.18, true)
-            task.wait(0.18)
-            old.Position = UDim2.new(1,0,0,0)
-        end)
+        old.Visible = false
     end
-    new.Position = UDim2.new(1,0,0,0)
-    new:TweenPosition(UDim2.new(0,0,0,0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.18, true)
+    new.Visible = true
+    -- ensure scroll position reset
+    new.CanvasPosition = Vector2.new(0,0)
 end
 
--- nav button factory
+-- nav button factory (improved)
 local function makeNavButton(text, order)
     local btn = Instance.new("TextButton", nav)
     btn.Size = UDim2.new(1, -12, 0, 40)
-    btn.Position = UDim2.new(0, 6, 0, (order-1) * 48 + 10)
+    btn.Position = UDim2.new(0, 6, 0, (order-1) * 48 + 6)
     btn.BackgroundColor3 = Color3.fromRGB(18,18,20)
     btn.Font = Enum.Font.Gotham
     btn.TextSize = 14
@@ -465,11 +419,11 @@ local function makeNavButton(text, order)
 end
 
 -- create pages
-Pages.Tracker = createPage("Tracker")      -- live attackers
-Pages.History = createPage("History")      -- archived attackers
-Pages.KillCounter = createPage("KillCounter") -- choose player, count kills/deaths
-Pages.Threats = createPage("Threats")      -- threat matrix
-Pages.Misc = createPage("Misc")            -- current attacker details
+Pages.Tracker = createPage("Tracker")
+Pages.History = createPage("History")
+Pages.KillCounter = createPage("KillCounter")
+Pages.Threats = createPage("Threats")
+Pages.Misc = createPage("Misc")
 
 -- create nav buttons
 local navButtons = {
@@ -481,15 +435,14 @@ local navButtons = {
 }
 for _, v in ipairs(navButtons) do
     local pageName = v.name
-    v.btn.MouseButton1Click:Connect(function()
-        showPage(pageName)
-    end)
+    v.btn.MouseButton1Click:Connect(function() showPage(pageName) end)
 end
 
+-- start with Tracker visible
 showPage("Tracker")
 
 -- =============
--- Page: TRACKER (live attackers)
+-- Tracker page content
 -- =============
 local trackerHeader = Instance.new("TextLabel")
 trackerHeader.Size = UDim2.new(1, -12, 0, 28)
@@ -503,20 +456,35 @@ trackerHeader.Parent = Pages.Tracker
 local thStroke = Instance.new("UIStroke", trackerHeader); registerStroke(thStroke)
 
 local liveContainer = Instance.new("Frame", Pages.Tracker)
-liveContainer.Size = UDim2.new(1, -12, 0, 180)
+liveContainer.Size = UDim2.new(1, -12, 0, 200)
 liveContainer.BackgroundTransparency = 1
+liveContainer.LayoutOrder = 1
+liveContainer.Parent = Pages.Tracker
+
 local liveScroll = Instance.new("ScrollingFrame", liveContainer)
-liveScroll.Size = UDim2.new(1,0,1,0)
+liveScroll.Size = UDim2.new(1, 0, 1, 0)
+liveScroll.Position = UDim2.new(0, 0, 0, 0)
 liveScroll.BackgroundTransparency = 1
 liveScroll.CanvasSize = UDim2.new(0,0,0,0)
+liveScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
 local liveLayout = Instance.new("UIListLayout", liveScroll)
 liveLayout.Padding = UDim.new(0,6)
+liveLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    local y = liveLayout.AbsoluteContentSize.Y
+    liveScroll.CanvasSize = UDim2.new(0, 0, 0, y + 8)
+end)
 
-local function makeLiveRow(name, hits, timeLeft)
+local function clearChildrenOfType(parent, predicate)
+    for _,c in ipairs(parent:GetChildren()) do
+        if predicate(c) then c:Destroy() end
+    end
+end
+
+local function makeLiveRow(name, hits)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 36)
     row.BackgroundColor3 = Color3.fromRGB(12,12,15)
-    row.Parent = liveScroll
+    row.LayoutOrder = 0
     local rc = Instance.new("UICorner", row); rc.CornerRadius = UDim.new(0,8)
     local stroke = Instance.new("UIStroke", row); registerStroke(stroke)
 
@@ -550,17 +518,13 @@ local function makeLiveRow(name, hits, timeLeft)
     local fcorner = Instance.new("UICorner", findBtn)
     local fstroke = Instance.new("UIStroke", findBtn); registerStroke(fstroke)
 
-    -- find behaviour: highlight the player
     findBtn.MouseButton1Click:Connect(function()
-        -- attempt to find player by name
         local pl = Players:FindFirstChild(name)
         if pl and pl.Character and pl.Character.PrimaryPart then
-            -- highlight using Highlight instance
             local hl = Instance.new("Highlight")
             hl.Name = "_ATK_FindHighlight"
             hl.Adornee = pl.Character
             hl.Parent = PlayerGui
-            -- color by team if available
             if pl.TeamColor then hl.FillColor = pl.TeamColor.Color end
             task.delay(4, function() if hl and hl.Parent then hl:Destroy() end end)
         end
@@ -570,7 +534,7 @@ local function makeLiveRow(name, hits, timeLeft)
 end
 
 -- =============
--- Page: HISTORY
+-- History page content
 -- =============
 local historyHeader = Instance.new("TextLabel")
 historyHeader.Size = UDim2.new(1, -12, 0, 28)
@@ -582,11 +546,17 @@ historyHeader.TextSize = 16
 historyHeader.TextColor3 = Color3.fromRGB(230,230,230)
 historyHeader.Parent = Pages.History
 local historyScroll = Instance.new("ScrollingFrame", Pages.History)
-historyScroll.Size = UDim2.new(1, -12, 1, -40)
+historyScroll.Size = UDim2.new(1, -12, 1, -44)
 historyScroll.Position = UDim2.new(0, 6, 0, 44)
 historyScroll.BackgroundTransparency = 1
+historyScroll.CanvasSize = UDim2.new(0,0,0,0)
+historyScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
 local historyLayout = Instance.new("UIListLayout", historyScroll)
 historyLayout.Padding = UDim.new(0,6)
+historyLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    local y = historyLayout.AbsoluteContentSize.Y
+    historyScroll.CanvasSize = UDim2.new(0, 0, 0, y + 8)
+end)
 
 local function makeHistoryRow(item)
     local lbl = Instance.new("TextLabel")
@@ -599,11 +569,12 @@ local function makeHistoryRow(item)
     local fromT = os.date("%H:%M:%S", item.timeFirst)
     local toT = os.date("%H:%M:%S", item.timeLast)
     lbl.Text = string.format("%s — hits: %d — %s → %s", item.name, item.hits, fromT, toT)
-    lbl.Parent = historyScroll
+    lbl.LayoutOrder = 0
+    return lbl
 end
 
 -- =============
--- Page: KILL COUNTER
+-- Kill counter page content (keeps original logic but stable layout)
 -- =============
 local kcHeader = Instance.new("TextLabel")
 kcHeader.Size = UDim2.new(1, -12, 0, 28)
@@ -615,16 +586,19 @@ kcHeader.TextSize = 16
 kcHeader.TextColor3 = Color3.fromRGB(230,230,230)
 kcHeader.Parent = Pages.KillCounter
 
--- live server player list (scroll)
 local kcList = Instance.new("ScrollingFrame", Pages.KillCounter)
 kcList.Size = UDim2.new(1, -12, 1, -120)
 kcList.Position = UDim2.new(0, 6, 0, 44)
 kcList.BackgroundTransparency = 1
 kcList.CanvasSize = UDim2.new(0,0,0,0)
+kcList.AutomaticCanvasSize = Enum.AutomaticSize.None
 local kcLayout = Instance.new("UIListLayout", kcList)
 kcLayout.Padding = UDim.new(0,6)
+kcLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    local y = kcLayout.AbsoluteContentSize.Y
+    kcList.CanvasSize = UDim2.new(0,0,0,y + 8)
+end)
 
--- selected player info
 local selectedLabel = Instance.new("TextLabel", Pages.KillCounter)
 selectedLabel.Size = UDim2.new(1, -12, 0, 28)
 selectedLabel.Position = UDim2.new(0, 6, 1, -64)
@@ -644,8 +618,7 @@ kdInfo.TextColor3 = Color3.fromRGB(200,200,200)
 kdInfo.Text = "Kills: 0    Deaths: 0"
 
 local function refreshKillList()
-    -- clear
-    for _,c in ipairs(kcList:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+    clearChildrenOfType(kcList, function(c) return c:IsA("TextButton") end)
     local y = 0
     for _, pl in ipairs(Players:GetPlayers()) do
         if pl ~= LocalPlayer then
@@ -657,6 +630,7 @@ local function refreshKillList()
             btn.TextSize = 14
             btn.TextColor3 = Color3.fromRGB(240,240,240)
             btn.BackgroundColor3 = Color3.fromRGB(18,18,20)
+            btn.LayoutOrder = 0
             btn.Parent = kcList
             local corner = Instance.new("UICorner", btn)
             local stroke = Instance.new("UIStroke", btn); registerStroke(stroke)
@@ -669,7 +643,7 @@ local function refreshKillList()
             y = y + 36
         end
     end
-    kcList.CanvasSize = UDim2.new(0,0,0, y)
+    kcList.CanvasSize = UDim2.new(0,0,0,y)
 end
 
 Players.PlayerAdded:Connect(refreshKillList)
@@ -684,9 +658,7 @@ end)
 refreshKillList()
 
 -- =============
--- Page: THREATS
---  - shows up to 10 players split left/right
---  - calculates threat level by hits & proximity & tools
+-- Threats page (kept, but refreshed safely)
 -- =============
 local threatsHeader = Instance.new("TextLabel")
 threatsHeader.Size = UDim2.new(1, -12, 0, 28)
@@ -702,13 +674,12 @@ local threatsLeft = Instance.new("Frame", Pages.Threats)
 threatsLeft.Size = UDim2.new(0.5, -8, 1, -44)
 threatsLeft.Position = UDim2.new(0, 6, 0, 44)
 threatsLeft.BackgroundTransparency = 1
-local threatsRight = threatsLeft:Clone()
-threatsRight.Parent = Pages.Threats
+local threatsRight = Instance.new("Frame", Pages.Threats)
+threatsRight.Size = UDim2.new(0.5, -8, 1, -44)
 threatsRight.Position = UDim2.new(0.5, 2, 0, 44)
+threatsRight.BackgroundTransparency = 1
 
 local function computeThreatForPlayer(pl)
-    -- simple scoring:
-    -- hits in recent attackers weight heavily, distance weight, tool presence
     local score = 0
     local data = attackers[pl.Name]
     if data then score = score + data.hits * 2 end
@@ -733,9 +704,8 @@ local function threatLabelForScore(score)
 end
 
 local function refreshThreats()
-    -- clear existing children
-    for _,c in ipairs(threatsLeft:GetChildren()) do if c:IsA("TextLabel") or c:IsA("Frame") then c:Destroy() end end
-    for _,c in ipairs(threatsRight:GetChildren()) do if c:IsA("TextLabel") or c:IsA("Frame") then c:Destroy() end end
+    clearChildrenOfType(threatsLeft, function(c) return c:IsA("TextLabel") or c:IsA("Frame") end)
+    clearChildrenOfType(threatsRight, function(c) return c:IsA("TextLabel") or c:IsA("Frame") end)
 
     local players = {}
     for _,pl in ipairs(Players:GetPlayers()) do if pl ~= LocalPlayer then table.insert(players, pl) end end
@@ -763,7 +733,7 @@ local function refreshThreats()
 end
 
 -- =============
--- Page: MISC (current attacker details & find button)
+-- Misc page (current attacker details)
 -- =============
 local miscHeader = Instance.new("TextLabel")
 miscHeader.Size = UDim2.new(1, -12, 0, 28)
@@ -775,7 +745,7 @@ miscHeader.TextSize = 16
 miscHeader.TextColor3 = Color3.fromRGB(230,230,230)
 miscHeader.Parent = Pages.Misc
 
-local currentLabel = Instance.new("TextLabel", Pages.Misc)
+local currentLabel = Instance.new("TextLabel")
 currentLabel.Size = UDim2.new(1, -12, 0, 24)
 currentLabel.Position = UDim2.new(0, 6, 0, 44)
 currentLabel.BackgroundTransparency = 1
@@ -783,6 +753,7 @@ currentLabel.Font = Enum.Font.Gotham
 currentLabel.TextSize = 14
 currentLabel.TextColor3 = Color3.fromRGB(230,230,230)
 currentLabel.Text = "Current Attacker: (none)"
+currentLabel.Parent = Pages.Misc
 
 local statsFrame = Instance.new("Frame", Pages.Misc)
 statsFrame.Size = UDim2.new(1, -12, 0, 100)
@@ -811,7 +782,6 @@ local findCorner = Instance.new("UICorner", findAttackerBtn)
 local findStroke = Instance.new("UIStroke", findAttackerBtn); registerStroke(findStroke)
 
 local currentAttackerName = nil
-
 findAttackerBtn.MouseButton1Click:Connect(function()
     if not currentAttackerName then return end
     local pl = Players:FindFirstChild(currentAttackerName)
@@ -825,7 +795,7 @@ findAttackerBtn.MouseButton1Click:Connect(function()
 end)
 
 -- =============
--- Small animated notification helper (used when opening/closing via chat)
+-- Small animated notification helper
 -- =============
 local function smallNotice(text, duration)
     duration = duration or 1.6
@@ -845,7 +815,6 @@ local function smallNotice(text, duration)
     lbl.TextColor3 = Color3.fromRGB(230,230,230)
     lbl.Text = text
 
-    -- animate in / out
     fg.Position = UDim2.new(0.5, -130, -0.2, 0)
     fg:TweenPosition(UDim2.new(0.5, -130, 0.12, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.28, true)
     task.delay(duration, function()
@@ -861,21 +830,20 @@ local function openTracker()
     smallNotice("Opening tracker...")
     task.delay(0.65, function()
         main.Visible = true
-        main:TweenPosition(UDim2.new(0.5, 0, 0.5, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.35, true)
+        main.Position = UDim2.new(0.5, 0, 0.5, 0)
     end)
 end
 local function closeTracker()
     smallNotice("Closing tracker...")
     task.delay(0.65, function()
-        main:TweenPosition(UDim2.new(0.5, 0, -1.2, 0), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.35, true)
+        main.Position = UDim2.new(0.5, 0, -1.2, 0)
         task.delay(0.36, function() main.Visible = false end)
     end)
 end
 local function toggleTracker()
-    if not main.Visible or main.Position.Y.Scale < 0 then openTracker() else closeTracker() end
+    if not main.Visible then openTracker() else closeTracker() end
 end
 
--- chat handling: use TextChatService if present, else fall back to Player.Chatted
 if TextChatService and TextChatService.MessageReceived then
     TextChatService.MessageReceived:Connect(function(msg)
         local source = nil
@@ -891,7 +859,6 @@ if TextChatService and TextChatService.MessageReceived then
         elseif txt == "/trackerclose" then closeTracker() end
     end)
 else
-    -- fallback
     LocalPlayer.Chatted:Connect(function(msg)
         local txt = (msg or ""):lower():gsub("^%s*(.-)%s*$","%1")
         if txt == "/tracker" or txt == "/trackeropen" then openTracker()
@@ -899,33 +866,31 @@ else
     end)
 end
 
--- initial visibility
 main.Visible = false
+main.Position = UDim2.new(0.5, 0, -1.2, 0)
 
 -- ====================
--- UI update loop: refresh pages from data structures
+-- UI update loop (improved & stable)
 -- ====================
-spawn(function()
+task.spawn(function()
     while screen.Parent do
-        -- housekeeping
         cleanupInactive()
 
         -- refresh Tracker page list
-        for _, c in ipairs(liveScroll:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+        clearChildrenOfType(liveScroll, function(c) return c:IsA("Frame") end)
         local nowt = now()
         local liveCount = 0
         for name, data in pairs(attackers) do
-            local timeLeft = math.max(0, INACTIVITY_TIMEOUT - (nowt - data.lastHit))
-            local row = makeLiveRow(name, data.hits, timeLeft)
+            local row = makeLiveRow(name, data.hits)
             row.Parent = liveScroll
             liveCount = liveCount + 1
         end
-        liveScroll.CanvasSize = UDim2.new(0, 0, 0, (#liveScroll:GetChildren()) * 44)
 
         -- refresh history page (show top 50)
-        for _, c in ipairs(historyScroll:GetChildren()) do if c:IsA("TextLabel") then c:Destroy() end end
+        clearChildrenOfType(historyScroll, function(c) return c:IsA("TextLabel") end)
         for i=1, math.min(50, #history) do
-            makeHistoryRow(history[i])
+            local lbl = makeHistoryRow(history[i])
+            lbl.Parent = historyScroll
         end
 
         -- refresh kill counter info for selected player
@@ -939,7 +904,6 @@ spawn(function()
         refreshThreats()
 
         -- refresh misc current attacker & stats
-        -- pick the most-recent attacker if any
         local mostRecentName, mostRecentTime = nil, -1
         for name,data in pairs(attackers) do
             if data.lastHit and data.lastHit > mostRecentTime then
@@ -956,7 +920,6 @@ spawn(function()
                 local hum = pl.Character:FindFirstChildOfClass("Humanoid")
                 if hum then ws = tostring(math.floor(hum.WalkSpeed or 0)) jp = tostring(math.floor(hum.JumpPower or hum.JumpHeight or 0)) end
                 leftStats.Text = string.format("WalkSpeed: %s\nJumpPower: %s\nDistance: %d studs", ws, jp, dist)
-                -- attempt to list tools used (if present)
                 local toolsUsed = {}
                 for _, c in ipairs(pl.Character:GetChildren()) do if c:IsA("Tool") then table.insert(toolsUsed, c.Name) end end
                 if #toolsUsed == 0 then rightStats.Text = "Tools: (none detected)\nDamage: (n/a)" else rightStats.Text = "Tools: "..table.concat(toolsUsed, ", ").."\nDamage: (n/a)" end
@@ -1004,4 +967,4 @@ _G.AttackerTracker = {
     end
 }
 
-print("[AttackerTracker] Initialized. Use /tracker to open.")
+print("[AttackerTracker] UI-stable version initialized. Use /tracker to open.")
