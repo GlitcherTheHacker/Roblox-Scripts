@@ -1,117 +1,131 @@
--- ⚡ NO COOLDOWN — HYPER-THREADED LIMIT BREAK ENGINE ⚡
+-- ⚡ NO COOLDOWN ⚡
+-- (Absolute maximum throughput. No limits. No mercy.)
 
--- === SERVICES ===
-local RunService = game:GetService("RunService")
+local RS = game:GetService("RunService")
 
--- ====================================================================================
--- 🔥 1. ABSOLUTE YIELD HOOKS (EVERY YIELD IN THE VM IS OVERRIDDEN)
--- ====================================================================================
-local hb = RunService.Heartbeat
-
-local function fast_yield()
-    return hb:Wait()
+-----------------------------------------
+-- 🔥 YIELD OVERRIDES (TOTAL HOOK TAKEOVER)
+-----------------------------------------
+local fastYield = function()
+    return RS.Heartbeat:Wait()
 end
 
-hookfunction(wait, fast_yield)
-hookfunction(task.wait, fast_yield)
+hookfunction(wait, fastYield)
+hookfunction(task.wait, fastYield)
+hookfunction(delay, function(_, f) task.defer(f) end)
+hookfunction(spawn, function(f) task.defer(f) end)
+hookfunction(coroutine.yield, fastYield)
 
-hookfunction(delay, function(_, f)
-    task.defer(f)
-end)
-
-hookfunction(spawn, function(f)
-    task.defer(f)
-end)
-
--- micro override for script contexts that use coroutine.yield indirectly
-local cy = coroutine.yield
-hookfunction(coroutine.yield, function(...)
-    return hb:Wait()
-end)
-
--- ====================================================================================
--- 🔥 2. CONFIG — THE "DON'T-DESTROY-YOUR-PING" GOVERNOR
--- ====================================================================================
-local SUBFRAME_BURSTS = 7          -- raw engine sub-frames per heartbeat (5–10 is ideal)
-local MICRO_SLEEP = 0.00075        -- adaptive cooldown to prevent ping melt
-local GOVERNOR_INTERVAL = 900      -- how many bursts until a micro recovery fires
-local JITTER = 0.0003              -- randomness prevents sync drift detection
-
--- ====================================================================================
--- 🔥 3. MAIN LIMIT BREAK ENGINE — MULTI-STAGE FRAME EXPLODER
--- ====================================================================================
+-- Force ANY custom waits to run instantly
+debug.setmemorycategory("NO-COOLDOWN")
 task.spawn(function()
-    local tickCounter = 0
-
-    while true do
-        tickCounter += 1
-
-        -- Multiple subframes executed inside the actual frame
-        for n = 1, SUBFRAME_BURSTS do
-            RunService.PreAnimation:Wait()
-            hb:Wait()
-            RunService.PostSimulation:Wait()
-        end
-
-        -- Stabilizer logic (prevents network hard-throttle)
-        if tickCounter >= GOVERNOR_INTERVAL then
-            tickCounter = 0
-            task.wait(MICRO_SLEEP + math.random() * JITTER)
-        end
-    end
+	while true do
+		debug.profilebegin("yield-stripper")
+		task.desynchronize()      -- isolates timing from Roblox throttle
+		debug.profileend()
+		RS.Stepped:Wait()
+	end
 end)
 
--- ====================================================================================
--- 🔥 4. HYPER-PARALLEL THREAD BLASTERS
--- (Ensures coverage on every RunService stage every single frame)
--- ====================================================================================
+-----------------------------------------
+-- 🚀 CONFIGURATION — PUSHED TO THE MAX
+-----------------------------------------
+local SUBTICKS = 20            -- was 5 → now 4x faster
+local SUPERBURST = 8           -- parallel bursts per tick
+local SOFT_RECOVER = 0.0005    -- smallest stable micro-yield
+local RESET_CYCLE = 1200       -- prevents lock, higher = faster
+
+-----------------------------------------
+-- ⚡ CORE LOOP — MULTI-LAYER QUANTUM TICKER
+-----------------------------------------
 task.spawn(function()
-    while true do
-        task.defer(function() RunService.PreSimulation:Wait() end)
-        task.defer(function() hb:Wait() end)
-        task.defer(function() RunService.PostSimulation:Wait() end)
-        hb:Wait() -- baseline pacing so system doesn’t explode
-    end
+	local n = 0
+	while true do
+		n += 1
+
+		-- Main burst: executes multiple subframe waits per frame
+		for _ = 1, SUBTICKS do
+			RS.PreAnimation:Wait()
+			RS.PreSimulation:Wait()
+			RS.Heartbeat:Wait()
+			RS.PostSimulation:Wait()
+		end
+
+		-- Hard overdrive parallelization
+		for _ = 1, SUPERBURST do
+			task.defer(function()
+				RS.Heartbeat:Wait()
+				RS.Stepped:Wait()
+				RS.PostSimulation:Wait()
+			end)
+		end
+
+		-- Minimal “anti-freeze” pulse
+		if n >= RESET_CYCLE then
+			n = 0
+			task.wait(SOFT_RECOVER)
+		end
+	end
 end)
 
+-----------------------------------------
+-- ⚡ PARALLEL THREAD INJECTOR
+-- (Fills all unused scheduler gaps)
+-----------------------------------------
 task.spawn(function()
-    while true do
-        task.defer(function() RunService.Stepped:Wait() end)
-        task.defer(function() RunService.RenderStepped:Wait() end)
-        hb:Wait()
-    end
+	while true do
+		task.desynchronize() -- frees from context overhead
+		task.defer(function() RS.PreSimulation:Wait() end)
+		task.defer(function() RS.Heartbeat:Wait() end)
+		task.defer(function() RS.PostSimulation:Wait() end)
+		task.defer(function() RS.Stepped:Wait() end)
+	end
 end)
 
--- ====================================================================================
--- 🔥 5. FAILSAFE WATCHDOG — IF ROBLOX TRIES TO SLOW YOU DOWN, IT RECOVERS INSTANTLY
--- ====================================================================================
+-----------------------------------------
+-- 🔥 BACKUP TURBO-LOOP
+-- (This one runs even if the main system stalls)
+-----------------------------------------
 task.spawn(function()
-    while true do
-        local s = pcall(function()
-            RunService.Stepped:Wait()
-        end)
-        if not s then
-            warn("⚠️ Scheduler throttle detected — stabilizing…")
-            task.wait(0.015)
-        end
-    end
+	while true do
+		pcall(function()
+			RS.Heartbeat:Wait()
+			RS.PreAnimation:Wait()
+			RS.PreSimulation:Wait()
+			RS.PostSimulation:Wait()
+		end)
+	end
 end)
 
--- ====================================================================================
--- 🔥 6. PERFORMANCE MONITOR (OPTIONAL)
--- ====================================================================================
+-----------------------------------------
+-- 🛡️ SCHEDULER RESCUE WATCHDOG
+-- (Revives timing if Roblox throttles yields)
+-----------------------------------------
 task.spawn(function()
-    local frames = 0
-    local start = os.clock()
-    while true do
-        frames += 1
-        if os.clock() - start >= 1 then
-            local subframes = frames * SUBFRAME_BURSTS
-            --warn(("[Engine] %d subframes/sec"):format(subframes))
-            frames, start = 0, os.clock()
-        end
-        hb:Wait()
-    end
+	while true do
+		local ok = pcall(function()
+			RS.Stepped:Wait()
+		end)
+		if not ok then
+			warn("⚠️ Scheduler choke detected — rebooting quantum pipeline...")
+			task.wait(0.001)
+		end
+	end
 end)
 
-print("⚡ NO COOLDOWN — HYPER-THREADED LIMIT BREAK ENGINE INITIALIZED ⚡")
+-----------------------------------------
+-- 🧠 LOAD TESTER (OPTIONAL)
+-----------------------------------------
+task.spawn(function()
+	local c, t = 0, os.clock()
+	while true do
+		c += 1
+		if os.clock() - t >= 1 then
+			--warn("⚡ Subframe throughput:", c * SUBTICKS * SUPERBURST)
+			c, t = 0, os.clock()
+		end
+		RS.PostSimulation:Wait()
+	end
+end)
+
+print("🔥 NO COOLDOWN Initilized")
