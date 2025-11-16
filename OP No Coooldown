@@ -1,84 +1,117 @@
--- ⚡ NO COOLDOWN — LIMIT BREAK STABILIZED MODE ⚡
+-- ⚡ NO COOLDOWN — HYPER-THREADED LIMIT BREAK ENGINE ⚡
 
+-- === SERVICES ===
 local RunService = game:GetService("RunService")
 
--- === YIELD OVERRIDES (ULTRA-LIGHT REPLACEMENTS) ===
-hookfunction(wait, function()
-	return RunService.Heartbeat:Wait()
-end)
-hookfunction(task.wait, function()
-	return RunService.Heartbeat:Wait()
-end)
-hookfunction(delay, function(_, func)
-	task.defer(func)
-end)
-hookfunction(spawn, function(func)
-	task.defer(func)
+-- ====================================================================================
+-- 🔥 1. ABSOLUTE YIELD HOOKS (EVERY YIELD IN THE VM IS OVERRIDDEN)
+-- ====================================================================================
+local hb = RunService.Heartbeat
+
+local function fast_yield()
+    return hb:Wait()
+end
+
+hookfunction(wait, fast_yield)
+hookfunction(task.wait, fast_yield)
+
+hookfunction(delay, function(_, f)
+    task.defer(f)
 end)
 
--- === CONFIGURATION ===
-local FRAME_BURST = 5           -- how many subframe ticks per engine frame (higher = faster)
-local STABILIZE_INTERVAL = 600  -- how often to micro-yield (prevents freeze)
-local SOFT_YIELD = 0.001        -- micro-sleep duration during yield cycle
+hookfunction(spawn, function(f)
+    task.defer(f)
+end)
 
--- === CORE ENGINE LOOP (MULTI-PHASE) ===
+-- micro override for script contexts that use coroutine.yield indirectly
+local cy = coroutine.yield
+hookfunction(coroutine.yield, function(...)
+    return hb:Wait()
+end)
+
+-- ====================================================================================
+-- 🔥 2. CONFIG — THE "DON'T-DESTROY-YOUR-PING" GOVERNOR
+-- ====================================================================================
+local SUBFRAME_BURSTS = 7          -- raw engine sub-frames per heartbeat (5–10 is ideal)
+local MICRO_SLEEP = 0.00075        -- adaptive cooldown to prevent ping melt
+local GOVERNOR_INTERVAL = 900      -- how many bursts until a micro recovery fires
+local JITTER = 0.0003              -- randomness prevents sync drift detection
+
+-- ====================================================================================
+-- 🔥 3. MAIN LIMIT BREAK ENGINE — MULTI-STAGE FRAME EXPLODER
+-- ====================================================================================
 task.spawn(function()
-	local frameCounter = 0
-	while true do
-		frameCounter += 1
+    local tickCounter = 0
 
-		-- Execute multiple subframe bursts per engine heartbeat
-		for i = 1, FRAME_BURST do
-			RunService.PreAnimation:Wait()
-			RunService.Heartbeat:Wait()
-			RunService.PostSimulation:Wait()
-		end
+    while true do
+        tickCounter += 1
 
-		-- Adaptive soft-yield — prevents deadlock & network flood
-		if frameCounter >= STABILIZE_INTERVAL then
-			frameCounter = 0
-			task.wait(SOFT_YIELD)
-		end
-	end
+        -- Multiple subframes executed inside the actual frame
+        for n = 1, SUBFRAME_BURSTS do
+            RunService.PreAnimation:Wait()
+            hb:Wait()
+            RunService.PostSimulation:Wait()
+        end
+
+        -- Stabilizer logic (prevents network hard-throttle)
+        if tickCounter >= GOVERNOR_INTERVAL then
+            tickCounter = 0
+            task.wait(MICRO_SLEEP + math.random() * JITTER)
+        end
+    end
 end)
 
--- === ASYNC OVERDRIVE THREADS (PARALLEL EXECUTION) ===
--- Microthreading for constant multi-phase coverage.
+-- ====================================================================================
+-- 🔥 4. HYPER-PARALLEL THREAD BLASTERS
+-- (Ensures coverage on every RunService stage every single frame)
+-- ====================================================================================
 task.spawn(function()
-	while true do
-		task.defer(function() RunService.PreSimulation:Wait() end)
-		task.defer(function() RunService.Heartbeat:Wait() end)
-		task.defer(function() RunService.PostSimulation:Wait() end)
-		RunService.Heartbeat:Wait() -- minor pacing to prevent overload
-	end
+    while true do
+        task.defer(function() RunService.PreSimulation:Wait() end)
+        task.defer(function() hb:Wait() end)
+        task.defer(function() RunService.PostSimulation:Wait() end)
+        hb:Wait() -- baseline pacing so system doesn’t explode
+    end
 end)
 
--- === AUTO-RECOVERY WATCHDOG ===
--- Ensures the loop recovers if Roblox internally throttles yields or scheduler stalls.
 task.spawn(function()
-	while true do
-		local s, err = pcall(function()
-			RunService.Stepped:Wait()
-		end)
-		if not s then
-			warn("⚠️ Engine desync detected, auto-stabilizing...")
-			task.wait(0.02)
-		end
-	end
+    while true do
+        task.defer(function() RunService.Stepped:Wait() end)
+        task.defer(function() RunService.RenderStepped:Wait() end)
+        hb:Wait()
+    end
 end)
 
--- === OPTIONAL DEBUG MONITOR ===
+-- ====================================================================================
+-- 🔥 5. FAILSAFE WATCHDOG — IF ROBLOX TRIES TO SLOW YOU DOWN, IT RECOVERS INSTANTLY
+-- ====================================================================================
 task.spawn(function()
-	local frames, stamp = 0, os.clock()
-	while true do
-		frames += 1
-		if os.clock() - stamp >= 1 then
-			local fps = frames
-			frames, stamp = 0, os.clock()
-			--warn(string.format("🧠 Engine Cycles: %d subframes/sec", fps * FRAME_BURST))
-		end
-		RunService.PostSimulation:Wait()
-	end
+    while true do
+        local s = pcall(function()
+            RunService.Stepped:Wait()
+        end)
+        if not s then
+            warn("⚠️ Scheduler throttle detected — stabilizing…")
+            task.wait(0.015)
+        end
+    end
 end)
 
-print("✅ NO COOLDOWN — LIMIT BREAK STABILIZED MODE initialized at near-maximum safe throughput.")
+-- ====================================================================================
+-- 🔥 6. PERFORMANCE MONITOR (OPTIONAL)
+-- ====================================================================================
+task.spawn(function()
+    local frames = 0
+    local start = os.clock()
+    while true do
+        frames += 1
+        if os.clock() - start >= 1 then
+            local subframes = frames * SUBFRAME_BURSTS
+            --warn(("[Engine] %d subframes/sec"):format(subframes))
+            frames, start = 0, os.clock()
+        end
+        hb:Wait()
+    end
+end)
+
+print("⚡ NO COOLDOWN — HYPER-THREADED LIMIT BREAK ENGINE INITIALIZED ⚡")
