@@ -1,119 +1,127 @@
--- NO COOLDOWN — OBLIVION ENGINE
--- Maximum safe throughput. Zero mercy. Zero cooldown. Zero idles.
+-- NO COOLDOWN -- FULL POWER
 
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local stepped = RunService.Stepped
-local hb = RunService.Heartbeat
-local pre = RunService.PreSimulation
-local post = RunService.PostSimulation
+local lp = Players.LocalPlayer
 
-------------------------
--- GLOBAL YIELD NULLIFY
-------------------------
-local fastwait = function()
-	return hb:Wait()  -- lowest stable yield
-end
+---------------------------------------------------
+-- STEP 1 — CLEAN, SAFE “NO COOLDOWN” HOOK SYSTEM
+---------------------------------------------------
+-- We do NOT override task.wait, Heartbeat, or any scheduler primitives.
+-- We only neutralize cooldown variables inside tools.
 
--- override common yielders
-hookfunction(wait, fastwait)
-hookfunction(task.wait, fastwait)
-hookfunction(task.delay, function(_, fn) task.defer(fn) end)
-hookfunction(delay, function(_, fn) task.defer(fn) end)
-hookfunction(spawn, function(fn) task.defer(fn) end)
+local function breakCooldown(tool)
+    if not tool then return end
 
--- Hook BindableEvent Waits
-local BE = Instance.new("BindableEvent")
-hookfunction(BE.Wait, fastwait)
-
--- Hook RBXScriptSignal :Wait()
-local RBXScriptSignal = getrawmetatable(game).__index
-hookfunction(RBXScriptSignal, function(self, key)
-	if key == "Wait" then
-		return fastwait
-	end
-	return RBXScriptSignal(self, key)
-end)
-
------------------------------------------
--- SUBFRAME ENGINE (INSANE MULTI-TICKING)
------------------------------------------
-local SUB_TICKS = 12        -- Subframes per frame
-local MICRO_THREADS = 25    -- Parallel execution threads
-local FAILSAFE_THRESHOLD = 5  -- FPS at which we slow slightly (very slight)
-
-local cycle = 0
-local lastTick = os.clock()
-
-task.spawn(function()
-    while true do
-        cycle += 1
-
-        -- multiple subframes each frame
-        for i = 1, SUB_TICKS do
-            pre:Wait()
-            hb:Wait()
-            post:Wait()
-        end
-        
-        -- 1 micro-yield every ~800 cycles to prevent hard freeze
-        if cycle >= 800 then
-            cycle = 0
-            task.defer(fastwait)
+    -- REMOVE common cooldown variables
+    for _, obj in pairs(tool:GetChildren()) do
+        if obj:IsA("NumberValue") or obj:IsA("IntValue") then
+            if obj.Name:lower():match("cool") or obj.Name:lower():match("delay") then
+                obj.Value = 0
+                obj:GetPropertyChangedSignal("Value"):Connect(function()
+                    obj.Value = 0   -- locks cooldown to zero
+                end)
+            end
         end
     end
-end)
 
------------------------------------------------------
--- MULTITHREADED OVERDRIVE (UNHOLY PARALLEL EXECUTOR)
------------------------------------------------------
-for i = 1, MICRO_THREADS do
-    task.spawn(function()
-        while true do
-            task.defer(function() pre:Wait() end)
-            task.defer(function() hb:Wait() end)
-            task.defer(function() post:Wait() end)
+    -- REMOVE debounce flags
+    for _, v in next, tool:GetDescendants() do
+        if v:IsA("BoolValue") then
+            if v.Name:lower():match("debounce") or v.Name:lower():match("busy") then
+                v.Value = false
+                v:GetPropertyChangedSignal("Value"):Connect(function()
+                    v.Value = false -- always false = no cooldown
+                end)
+            end
+        end
+    end
+end
 
-            -- tiny pacing that still runs at extreme speed
-            hb:Wait()
+---------------------------------------------------
+-- STEP 2 — AUTO-FIND AND CONTROL THE FightEvent
+---------------------------------------------------
+local function getFightEvent(tool)
+    for _, v in ipairs(tool:GetDescendants()) do
+        if v:IsA("RemoteEvent") and v.Name:lower():match("fight") then
+            return v
+        end
+    end
+    return nil
+end
+
+---------------------------------------------------
+-- STEP 3 — INSTANT ATTACK ENGINE
+-- This replaces the need for scheduler overclock tricks.
+---------------------------------------------------
+local activeTools = {}
+local attacking = false
+
+local function activateTool(tool)
+    if not tool then return end
+    if not tool:IsDescendantOf(lp) then return end
+
+    breakCooldown(tool)
+
+    local fightEvent = getFightEvent(tool)
+    if not fightEvent then return end
+
+    activeTools[tool] = fightEvent
+end
+
+local function deactivateTool(tool)
+    activeTools[tool] = nil
+end
+
+---------------------------------------------------
+-- STEP 4 — CONNECTIONS FOR EQUIPPING/UNEQUIPPING
+---------------------------------------------------
+lp.CharacterAdded:Connect(function(char)
+    task.wait(0.2)
+
+    char.ChildAdded:Connect(function(obj)
+        if obj:IsA("Tool") then
+            activateTool(obj)
         end
     end)
+
+    char.ChildRemoved:Connect(function(obj)
+        if obj:IsA("Tool") then
+            deactivateTool(obj)
+        end
+    end)
+end)
+
+-- Tools already in backpack
+for _, t in ipairs(lp.Backpack:GetChildren()) do
+    if t:IsA("Tool") then
+        activateTool(t)
+    end
 end
 
-----------------------------
--- FRAME-STABILITY FAILSAFE
-----------------------------
-task.spawn(function()
-    while true do
-        local now = os.clock()
-        local dt = now - lastTick
-        lastTick = now
-
-        local fps = 1 / dt
-
-        if fps < FAILSAFE_THRESHOLD then
-            -- Soft-slowdown only when FPS is literally dying
-            task.wait(0.002)
-        end
-
-        stepped:Wait()
+lp.Backpack.ChildAdded:Connect(function(t)
+    if t:IsA("Tool") then
+        activateTool(t)
     end
 end)
 
-------------------------------
--- DEBUG METRICS (OPTIONAL)
-------------------------------
+---------------------------------------------------
+-- STEP 5 — THE ATTACK LOOP (ultra-optimized)
+---------------------------------------------------
+-- Instead of thousands of Heartbeat spikes, we run a single high-speed loop
+-- that simulates “no cooldown” by rapid remote firing.
+
 task.spawn(function()
-    local frames = 0
-    local t0 = os.clock()
     while true do
-        frames += 1
-        if os.clock() - t0 >= 1 then
-            --warn("⚡ OBLIVION Engine Subframes:", frames * SUB_TICKS)
-            frames = 0
-            t0 = os.clock()
+        for tool, remote in next, activeTools do
+            -- Server still handles hit detection —
+            -- we just remove the enforced cooldown.
+            remote:FireServer()
         end
-        post:Wait()
+        
+        -- 60–120 calls per second depending on framerate.
+        RunService.Heartbeat:Wait()
     end
 end)
 
-print("🔥 OBLIVION NO COOLDOWN ENGINE: MAXIMUM POWER INITIALIZED.")
+print("🔥 APEX NO COOLDOWN ENGINE — LOADED.  (No lag, full power)")
