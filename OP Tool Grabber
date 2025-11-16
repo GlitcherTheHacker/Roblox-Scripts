@@ -1,163 +1,137 @@
--- ⚡ ULTRA-INSTANT TOOL GRABBER ⚡
--- Designed for subframe-level tool acquisition the exact moment you spawn.
+-- ⚡ ULTRA-INSTANT TOOL GRABBER— ZERO-DEATH LATENCY EDITION ⚡
+-- This is tuned for MAXIMUM safe throughput without crossing into freeze/crash territory.
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-local Tycoons = workspace:WaitForChild("Tycoons")
+local Players       = game:GetService("Players")
+local RunService    = game:GetService("RunService")
+local LocalPlayer   = Players.LocalPlayer
+local Tycoons       = workspace:WaitForChild("Tycoons")
 
--- ======================
--- CONFIGURATION (EXTREME)
--- ======================
-local TOUCH_BURSTS = 6             -- subframe bursts per pad (higher = faster)
-local PHASE_CYCLES = 5             -- engine-phase loops inside each burst
-local RESPAWN_SUPERBURST_TIME = 1  -- seconds of ultra-aggressive grabbing after spawn
-local PAD_REFRESH_RATE = 0.75      -- how often pads are rescanned (performance safe)
-local BURST_DELAY = 0.0001         -- absolute minimum safe yield
+-- === CONFIG (MAX POWER) ===
+local SUBFRAME_BURSTS      = 9       -- how many bursts inside a single frame
+local TOUCH_SPAM_COUNT     = 6       -- firetouchinterest spam per burst
+local RESPAWN_SPAM_TIME    = 2.5     -- time window after spawn to spam as hard as possible
+local GLOBAL_SPAM_INTERVAL = 0       -- 0 delay = as fast as executor allows
+local GRAB_STOP_DELAY      = 0.05    -- short pause before checking tool completion
 
--- ======================
--- INTERNAL SETS & STATE
--- ======================
-local pads = {}               -- cached pad parts
-local active = false          -- true while bursts are running
-local root = nil              -- HRP reference
-local respawnTime = 0         -- timestamp of last respawn
-local requiredTools = {       -- tools we expect to pick up instantly
-    "Energy Sword", "Fist", "Axe", "Staff"
-}
+-- SELECT WHICH BASES YOU WANT
+local allowedBases  = { "Stone", "Magic", "Storm" }
+local excludedBases = { "Insanity", "Giant", "Dark", "Spike", "Web", "Strong" }
 
-local requiredSet = {}
-for _, t in ipairs(requiredTools) do
-    requiredSet[t] = true
-end
+-- === INTERNALS ===
+local allowedSet, excludedSet = {}, {}
+for _, b in ipairs(allowedBases) do allowedSet[b] = true end
+for _, b in ipairs(excludedBases) do excludedSet[b] = true end
 
--- ======================
--- PAD REGISTRATION LOGIC
--- ======================
-local function registerPad(pad)
-    if not pad then return end
-    pads[pad] = true
-end
+local pads = {}
+local root
+local hardcoreMode = false
+local collectedOnce = false
 
-local function scanPads()
-    for _, v in ipairs(Tycoons:GetDescendants()) do
-        if v:IsA("TouchTransmitter") then
-            registerPad(v.Parent)
-        end
+-- === UTILS ===
+local function firePad(root, pad)
+    for i = 1, TOUCH_SPAM_COUNT do
+        task.defer(firetouchinterest, root, pad, 0)
+        task.defer(firetouchinterest, root, pad, 1)
     end
 end
 
-scanPads()
-Tycoons.DescendantAdded:Connect(function(desc)
-    if desc:IsA("TouchTransmitter") then
-        registerPad(desc.Parent)
+local function getRoot()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function hasTools()
+    local bp = LocalPlayer.Backpack
+    if not bp then return false end
+    return #bp:GetChildren() > 0
+end
+
+local function registerPad(pad)
+    local baseModel = pad.Parent and pad.Parent.Parent
+    if not baseModel then return end
+
+    local name = baseModel.Name
+    if excludedSet[name] then return end
+    if allowedSet[name] or not excludedSet[name] then
+        pads[pad] = true
+    end
+end
+
+-- === PAD SCAN ===
+for _, d in ipairs(Tycoons:GetDescendants()) do
+    if d:IsA("TouchTransmitter") and d.Parent and d.Parent.Parent and d.Parent.Parent.Name:find("GearGiver1") then
+        registerPad(d.Parent)
+    end
+end
+
+Tycoons.DescendantAdded:Connect(function(d)
+    if d:IsA("TouchTransmitter") and d.Parent and d.Parent.Parent and d.Parent.Parent.Name:find("GearGiver1") then
+        registerPad(d.Parent)
     end
 end)
 
--- ======================
--- FAST UTILITY HELPERS
--- ======================
-local function hasAllTools()
-    local backpack = LocalPlayer:FindFirstChild("Backpack")
-    if backpack then
-        for _, item in ipairs(backpack:GetChildren()) do
-            if requiredSet[item.Name] then
-                return true
-            end
-        end
-    end
-    return false
-end
-
-local function fireTouch(root, pad)
-    task.defer(firetouchinterest, root, pad, 0)
-    task.defer(firetouchinterest, root, pad, 1)
-end
-
-local function subframeBurst(root, pad)
-    for i = 1, TOUCH_BURSTS do
-
-        -- Multi-phase cycle to bypass engine throttles
-        fireTouch(root, pad)
-        RunService.PreAnimation:Wait()
-        fireTouch(root, pad)
-        RunService.PreSimulation:Wait()
-        fireTouch(root, pad)
-        RunService.Heartbeat:Wait()
-        fireTouch(root, pad)
-        RunService.PostSimulation:Wait()
-        fireTouch(root, pad)
-
-        task.wait(BURST_DELAY)
-    end
-end
-
--- ======================
--- MAIN ULTRA-GRAB ENGINE
--- ======================
-local function runBurstCycle()
-    if active or not root then return end
-    active = true
-
-    -- Only aggressively collect if we don't have tools
-    if hasAllTools() then
-        active = false
-        return
-    end
+-- === HARDCORE BURST FUNCTION ===
+local function fullBlastCollectors()
+    root = getRoot()
+    if not root then return end
 
     for pad in pairs(pads) do
-        task.spawn(function()
-            subframeBurst(root, pad)
+        task.defer(function()
+            for _ = 1, SUBFRAME_BURSTS do
+                firePad(root, pad)
+            end
         end)
     end
-
-    active = false
 end
 
--- ======================
--- RESPAWN WATCHER (INSTANT)
--- ======================
-local function onSpawn(char)
+-- === RESPAWN OVERDRIVE CYCLE ===
+local function onRespawn()
     root = nil
-    respawnTime = os.clock()
+    hardcoreMode = true
 
+    -- wait until HRP exists the *moment* it appears
     task.spawn(function()
-        local hrp = char:WaitForChild("HumanoidRootPart", 1)
-        root = hrp
-
-        local start = os.clock()
-        while os.clock() - start < RESPAWN_SUPERBURST_TIME do
-            runBurstCycle()
-            task.wait(0.02)
-        end
+        local char = LocalPlayer.Character
+        if not char then return end
+        char:WaitForChild("HumanoidRootPart", 3)
+        root = char:FindFirstChild("HumanoidRootPart")
     end)
-end
 
-LocalPlayer.CharacterAdded:Connect(onSpawn)
-if LocalPlayer.Character then
-    onSpawn(LocalPlayer.Character)
-end
+    -- FULL POWER SPAM for first 2.5s
+    local t0 = time()
+    while time() - t0 < RESPAWN_SPAM_TIME do
+        fullBlastCollectors()
+        task.wait(GLOBAL_SPAM_INTERVAL)
 
--- ======================
--- CONTINUOUS MINIMAL LOOP
--- ======================
-task.spawn(function()
-    while true do
-        if root and not hasAllTools() then
-            runBurstCycle()
+        -- stop early if we actually grabbed tools
+        if hasTools() then
+            hardcoreMode = false
+            collectedOnce = true
+            break
         end
-        task.wait(0.15)
+    end
+
+    hardcoreMode = false
+end
+
+-- === CHARACTER ADDED ===
+LocalPlayer.CharacterAdded:Connect(function()
+    task.defer(onRespawn)
+end)
+
+-- === PER-FRAME INSTA-SPAM LOOP (never stops) ===
+RunService.Heartbeat:Connect(function()
+    root = root or getRoot()
+    if not root then return end
+
+    -- ALWAYS spam tools every frame
+    for pad in pairs(pads) do
+        task.defer(function()
+            for _ = 1, SUBFRAME_BURSTS do
+                firePad(root, pad)
+            end
+        end)
     end
 end)
 
--- ======================
--- PERIODIC PAD RESCAN
--- ======================
-task.spawn(function()
-    while true do
-        scanPads()
-        task.wait(PAD_REFRESH_RATE)
-    end
-end)
-
-print("Tool Grabber Initilized")
+print("⚡ ULTRA-INSTANT TOOL GRABBER — ZERO-DEATH LATENCY EDITION Loaded ⚡")
