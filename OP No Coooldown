@@ -1,131 +1,119 @@
--- ⚡ NO COOLDOWN ⚡
--- (Absolute maximum throughput. No limits. No mercy.)
+-- NO COOLDOWN — OBLIVION ENGINE
+-- Maximum safe throughput. Zero mercy. Zero cooldown. Zero idles.
 
-local RS = game:GetService("RunService")
+local RunService = game:GetService("RunService")
+local stepped = RunService.Stepped
+local hb = RunService.Heartbeat
+local pre = RunService.PreSimulation
+local post = RunService.PostSimulation
 
------------------------------------------
--- 🔥 YIELD OVERRIDES (TOTAL HOOK TAKEOVER)
------------------------------------------
-local fastYield = function()
-    return RS.Heartbeat:Wait()
+------------------------
+-- GLOBAL YIELD NULLIFY
+------------------------
+local fastwait = function()
+	return hb:Wait()  -- lowest stable yield
 end
 
-hookfunction(wait, fastYield)
-hookfunction(task.wait, fastYield)
-hookfunction(delay, function(_, f) task.defer(f) end)
-hookfunction(spawn, function(f) task.defer(f) end)
-hookfunction(coroutine.yield, fastYield)
+-- override common yielders
+hookfunction(wait, fastwait)
+hookfunction(task.wait, fastwait)
+hookfunction(task.delay, function(_, fn) task.defer(fn) end)
+hookfunction(delay, function(_, fn) task.defer(fn) end)
+hookfunction(spawn, function(fn) task.defer(fn) end)
 
--- Force ANY custom waits to run instantly
-debug.setmemorycategory("NO-COOLDOWN")
-task.spawn(function()
-	while true do
-		debug.profilebegin("yield-stripper")
-		task.desynchronize()      -- isolates timing from Roblox throttle
-		debug.profileend()
-		RS.Stepped:Wait()
+-- Hook BindableEvent Waits
+local BE = Instance.new("BindableEvent")
+hookfunction(BE.Wait, fastwait)
+
+-- Hook RBXScriptSignal :Wait()
+local RBXScriptSignal = getrawmetatable(game).__index
+hookfunction(RBXScriptSignal, function(self, key)
+	if key == "Wait" then
+		return fastwait
 	end
+	return RBXScriptSignal(self, key)
 end)
 
 -----------------------------------------
--- 🚀 CONFIGURATION — PUSHED TO THE MAX
+-- SUBFRAME ENGINE (INSANE MULTI-TICKING)
 -----------------------------------------
-local SUBTICKS = 20            -- was 5 → now 4x faster
-local SUPERBURST = 8           -- parallel bursts per tick
-local SOFT_RECOVER = 0.0005    -- smallest stable micro-yield
-local RESET_CYCLE = 1200       -- prevents lock, higher = faster
+local SUB_TICKS = 12        -- Subframes per frame
+local MICRO_THREADS = 25    -- Parallel execution threads
+local FAILSAFE_THRESHOLD = 5  -- FPS at which we slow slightly (very slight)
 
------------------------------------------
--- ⚡ CORE LOOP — MULTI-LAYER QUANTUM TICKER
------------------------------------------
+local cycle = 0
+local lastTick = os.clock()
+
 task.spawn(function()
-	local n = 0
-	while true do
-		n += 1
+    while true do
+        cycle += 1
 
-		-- Main burst: executes multiple subframe waits per frame
-		for _ = 1, SUBTICKS do
-			RS.PreAnimation:Wait()
-			RS.PreSimulation:Wait()
-			RS.Heartbeat:Wait()
-			RS.PostSimulation:Wait()
-		end
-
-		-- Hard overdrive parallelization
-		for _ = 1, SUPERBURST do
-			task.defer(function()
-				RS.Heartbeat:Wait()
-				RS.Stepped:Wait()
-				RS.PostSimulation:Wait()
-			end)
-		end
-
-		-- Minimal “anti-freeze” pulse
-		if n >= RESET_CYCLE then
-			n = 0
-			task.wait(SOFT_RECOVER)
-		end
-	end
+        -- multiple subframes each frame
+        for i = 1, SUB_TICKS do
+            pre:Wait()
+            hb:Wait()
+            post:Wait()
+        end
+        
+        -- 1 micro-yield every ~800 cycles to prevent hard freeze
+        if cycle >= 800 then
+            cycle = 0
+            task.defer(fastwait)
+        end
+    end
 end)
 
------------------------------------------
--- ⚡ PARALLEL THREAD INJECTOR
--- (Fills all unused scheduler gaps)
------------------------------------------
+-----------------------------------------------------
+-- MULTITHREADED OVERDRIVE (UNHOLY PARALLEL EXECUTOR)
+-----------------------------------------------------
+for i = 1, MICRO_THREADS do
+    task.spawn(function()
+        while true do
+            task.defer(function() pre:Wait() end)
+            task.defer(function() hb:Wait() end)
+            task.defer(function() post:Wait() end)
+
+            -- tiny pacing that still runs at extreme speed
+            hb:Wait()
+        end
+    end)
+end
+
+----------------------------
+-- FRAME-STABILITY FAILSAFE
+----------------------------
 task.spawn(function()
-	while true do
-		task.desynchronize() -- frees from context overhead
-		task.defer(function() RS.PreSimulation:Wait() end)
-		task.defer(function() RS.Heartbeat:Wait() end)
-		task.defer(function() RS.PostSimulation:Wait() end)
-		task.defer(function() RS.Stepped:Wait() end)
-	end
+    while true do
+        local now = os.clock()
+        local dt = now - lastTick
+        lastTick = now
+
+        local fps = 1 / dt
+
+        if fps < FAILSAFE_THRESHOLD then
+            -- Soft-slowdown only when FPS is literally dying
+            task.wait(0.002)
+        end
+
+        stepped:Wait()
+    end
 end)
 
------------------------------------------
--- 🔥 BACKUP TURBO-LOOP
--- (This one runs even if the main system stalls)
------------------------------------------
+------------------------------
+-- DEBUG METRICS (OPTIONAL)
+------------------------------
 task.spawn(function()
-	while true do
-		pcall(function()
-			RS.Heartbeat:Wait()
-			RS.PreAnimation:Wait()
-			RS.PreSimulation:Wait()
-			RS.PostSimulation:Wait()
-		end)
-	end
+    local frames = 0
+    local t0 = os.clock()
+    while true do
+        frames += 1
+        if os.clock() - t0 >= 1 then
+            --warn("⚡ OBLIVION Engine Subframes:", frames * SUB_TICKS)
+            frames = 0
+            t0 = os.clock()
+        end
+        post:Wait()
+    end
 end)
 
------------------------------------------
--- 🛡️ SCHEDULER RESCUE WATCHDOG
--- (Revives timing if Roblox throttles yields)
------------------------------------------
-task.spawn(function()
-	while true do
-		local ok = pcall(function()
-			RS.Stepped:Wait()
-		end)
-		if not ok then
-			warn("⚠️ Scheduler choke detected — rebooting quantum pipeline...")
-			task.wait(0.001)
-		end
-	end
-end)
-
------------------------------------------
--- 🧠 LOAD TESTER (OPTIONAL)
------------------------------------------
-task.spawn(function()
-	local c, t = 0, os.clock()
-	while true do
-		c += 1
-		if os.clock() - t >= 1 then
-			--warn("⚡ Subframe throughput:", c * SUBTICKS * SUPERBURST)
-			c, t = 0, os.clock()
-		end
-		RS.PostSimulation:Wait()
-	end
-end)
-
-print("🔥 NO COOLDOWN Initilized")
+print("🔥 OBLIVION NO COOLDOWN ENGINE: MAXIMUM POWER INITIALIZED.")
