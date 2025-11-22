@@ -257,7 +257,6 @@ local function computeScale()
 end
 uiScale.Scale = computeScale()
 -- Update when window size changes
-UserInputService.WindowSizeChanged:Connect(function() uiScale.Scale = computeScale() end)
 if Camera then Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function() uiScale.Scale = computeScale() end) end
 
 -- rainbow stroke registry (keeps your look)
