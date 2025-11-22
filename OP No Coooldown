@@ -1,106 +1,89 @@
 -- ⚡ NO COOLDOWN
 
 local RunService = game:GetService("RunService")
+local Heartbeat = RunService.Heartbeat
+local PostSim = RunService.PostSimulation
+local PreSim = RunService.PreSimulation
+local RenderStep = RunService.RenderStepped
 
--- ===============================================================
--- 🔥 ULTRA-YIELD OVERRIDES
--- ===============================================================
-local hb = RunService.Heartbeat
-
+-- ============================================================
+-- Yield Override (Safe)
+-- ============================================================
 hookfunction(wait, function()
-	return hb:Wait()
+	return Heartbeat:Wait()
 end)
-
 hookfunction(task.wait, function()
-	return hb:Wait()
+	return Heartbeat:Wait()
 end)
 
-hookfunction(delay, function(_, fn)
-	task.defer(fn)
+hookfunction(delay, function(_, f)
+	task.defer(f)
+end)
+hookfunction(spawn, function(f)
+	task.defer(f)
 end)
 
-hookfunction(spawn, function(fn)
-	task.defer(fn)
-end)
+-- ============================================================
+-- CONFIG
+-- ============================================================
+local SUBFRAME_BURSTS = 6      -- subframe cycles per real frame
+local MICRO_DELAY = 0.0005     -- minimal yield to avoid starvation
+local RECOVERY_INTERVAL = 800  -- how often we soft-yield
+local RECOVERY_SLEEP = 0.001
 
--- ===============================================================
--- ⚡ CONFIG — MAXIMUM SAFE POWER
--- ===============================================================
-local SUBFRAME_BURSTS = 8            -- Number of sub-yields *per engine cycle*
-local STABILITY_CYCLE = 850          -- After this many cycles, engine micro-recovers
-local MICRO_RECOVER_TIME = 0.00085   -- Prevents lockups without lowering speed
-
--- ===============================================================
--- 🚀 MAIN INFINITE NO-COOLDOWN ENGINE
--- ===============================================================
+-- ============================================================
+-- QUANTUM ENGINE THREAD
+-- ============================================================
 task.spawn(function()
-	local cycle = 0
+	local cycles = 0
 
 	while true do
-		cycle += 1
+		cycles += 1
 
-		-- 🔥 Subframe burst — multiple phases per frame
-        -- We rotate through phases to prevent desync
+		-- LEGAL subframe chain (these fire in correct order)
 		for i = 1, SUBFRAME_BURSTS do
-			RunService.PreAnimation:Wait()
-			hb:Wait()
-			RunService.PreSimulation:Wait()
-			hb:Wait()
-			RunService.PostSimulation:Wait()
+			-- Phase chain
+			PreSim:Wait()
+			Heartbeat:Wait()
+			PostSim:Wait()
+
+			-- micro-yield to avoid scheduler starvation
+			task.wait(MICRO_DELAY)
 		end
 
-		-- 🧬 Stability anchor — prevents total engine choke
-		if cycle >= STABILITY_CYCLE then
-			cycle = 0
-			task.wait(MICRO_RECOVER_TIME)
+		-- periodic stabilization yield
+		if cycles >= RECOVERY_INTERVAL then
+			cycles = 0
+			task.wait(RECOVERY_SLEEP)
 		end
 	end
 end)
 
--- ===============================================================
--- 🧠 PARALLEL SIDE-LOOPS — Multi-threaded yield hijack
--- ===============================================================
-
+-- ============================================================
+-- ASYNC PARALLEL SUPPORT THREADS
+-- ============================================================
 task.spawn(function()
 	while true do
-		task.defer(function() RunService.PreSimulation:Wait() end)
-		task.defer(function() RunService.PostSimulation:Wait() end)
-		task.defer(function() RunService.PreAnimation:Wait() end)
-		hb:Wait()
+		task.defer(function() PreSim:Wait() end)
+		task.defer(function() Heartbeat:Wait() end)
+		task.defer(function() PostSim:Wait() end)
+		Heartbeat:Wait()
 	end
 end)
 
-task.spawn(function()
-	while true do
-		task.defer(function() hb:Wait() end)
-		task.defer(function() RunService.Stepped:Wait() end)
-		task.defer(function() RunService.Heartbeat:Wait() end)
-		RunService.Stepped:Wait()
-	end
-end)
-
-task.spawn(function()
-	while true do
-		task.defer(function() hb:Wait() end)
-		task.defer(function() hb:Wait() end)
-		RunService.PreSimulation:Wait()
-	end
-end)
-
--- ===============================================================
--- 🛡 WATCHDOG — Auto-repair if Roblox throttles scheduler
--- ===============================================================
+-- ============================================================
+-- WATCHDOG
+-- ============================================================
 task.spawn(function()
 	while true do
 		local ok = pcall(function()
 			RunService.Stepped:Wait()
 		end)
 		if not ok then
-			warn("⚠️ Scheduler Desync Detected — Quantum Engine Re-syncing...")
-			task.wait(0.015)
+			warn("⚠ Engine hitch — stabilizing.")
+			task.wait(0.02)
 		end
 	end
 end)
 
-
-print("🔮 NO COOLDOWN — Initilized")
+print("🔥 NO COOLDOWN — initialized.")
