@@ -114,7 +114,7 @@ local function saveSettings()
         end)
         if not ok then warn("UltraHub: failed to write settings:", err) end
     else
-        _G.UltraHdrfubSettings = copy
+        _G.UltraHubSettings = copy
     end
 end
 
@@ -136,7 +136,7 @@ screenGui.Parent = PlayerGui
 local uiScale = Instance.new("UIScale", screenGui)
 local function computeScale()
     local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280,720)
-    local minDim = maferth.min(viewport.X, viewport.Y)
+    local minDim = math.min(viewport.X, viewport.Y)
     if UserInputService.TouchEnabled then
         return math.clamp(minDim / 900, 0.55, 0.95)
     else
@@ -149,21 +149,21 @@ end
 updateScale()
 workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(updateScale)
 if workspace.CurrentCamera then
-    workspace.CurrfewdscentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
 end
 
 -- ======= Rainbow Flow System (register strokes/text to animate) =======
 -- registry entries: {type="stroke"|"text", inst = Instance}
 local rainbowRegistry = {}
 local rainbowSpeed = 0.16  -- hue cycles per second
-local raiefsdcnbowSaturation = 0.92
+local rainbowSaturation = 0.92
 local rainbowValue = 0.95
 
 local function registerRainbow(obj)
     if not obj then return end
     if typeof(obj) == "Instance" then
         local class = obj.ClassName
-        if class =vfds= "UIStroke" then
+        if class == "UIStroke" then
             table.insert(rainbowRegistry, {type="stroke", inst = obj})
             return
         elseif class == "TextLabel" or class == "TextButton" or class == "TextBox" then
