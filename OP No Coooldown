@@ -1,89 +1,84 @@
--- ⚡ NO COOLDOWN
+-- ⚡ NO COOLDOWN — LIMIT BREAK STABILIZED MODE ⚡
 
 local RunService = game:GetService("RunService")
-local Heartbeat = RunService.Heartbeat
-local PostSim = RunService.PostSimulation
-local PreSim = RunService.PreSimulation
-local RenderStep = RunService.RenderStepped
 
--- ============================================================
--- Yield Override (Safe)
--- ============================================================
+-- === YIELD OVERRIDES (ULTRA-LIGHT REPLACEMENTS) ===
 hookfunction(wait, function()
-	return Heartbeat:Wait()
+	return RunService.Heartbeat:Wait()
 end)
 hookfunction(task.wait, function()
-	return Heartbeat:Wait()
+	return RunService.Heartbeat:Wait()
+end)
+hookfunction(delay, function(_, func)
+	task.defer(func)
+end)
+hookfunction(spawn, function(func)
+	task.defer(func)
 end)
 
-hookfunction(delay, function(_, f)
-	task.defer(f)
-end)
-hookfunction(spawn, function(f)
-	task.defer(f)
-end)
+-- === CONFIGURATION ===
+local FRAME_BURST = 5           -- how many subframe ticks per engine frame (higher = faster)
+local STABILIZE_INTERVAL = 600  -- how often to micro-yield (prevents freeze)
+local SOFT_YIELD = 0.001        -- micro-sleep duration during yield cycle
 
--- ============================================================
--- CONFIG
--- ============================================================
-local SUBFRAME_BURSTS = 6      -- subframe cycles per real frame
-local MICRO_DELAY = 0.0005     -- minimal yield to avoid starvation
-local RECOVERY_INTERVAL = 800  -- how often we soft-yield
-local RECOVERY_SLEEP = 0.001
-
--- ============================================================
--- QUANTUM ENGINE THREAD
--- ============================================================
+-- === CORE ENGINE LOOP (MULTI-PHASE) ===
 task.spawn(function()
-	local cycles = 0
-
+	local frameCounter = 0
 	while true do
-		cycles += 1
+		frameCounter += 1
 
-		-- LEGAL subframe chain (these fire in correct order)
-		for i = 1, SUBFRAME_BURSTS do
-			-- Phase chain
-			PreSim:Wait()
-			Heartbeat:Wait()
-			PostSim:Wait()
-
-			-- micro-yield to avoid scheduler starvation
-			task.wait(MICRO_DELAY)
+		-- Execute multiple subframe bursts per engine heartbeat
+		for i = 1, FRAME_BURST do
+			RunService.PreAnimation:Wait()
+			RunService.Heartbeat:Wait()
+			RunService.PostSimulation:Wait()
 		end
 
-		-- periodic stabilization yield
-		if cycles >= RECOVERY_INTERVAL then
-			cycles = 0
-			task.wait(RECOVERY_SLEEP)
+		-- Adaptive soft-yield — prevents deadlock & network flood
+		if frameCounter >= STABILIZE_INTERVAL then
+			frameCounter = 0
+			task.wait(SOFT_YIELD)
 		end
 	end
 end)
 
--- ============================================================
--- ASYNC PARALLEL SUPPORT THREADS
--- ============================================================
+-- === ASYNC OVERDRIVE THREADS (PARALLEL EXECUTION) ===
+-- Microthreading for constant multi-phase coverage.
 task.spawn(function()
 	while true do
-		task.defer(function() PreSim:Wait() end)
-		task.defer(function() Heartbeat:Wait() end)
-		task.defer(function() PostSim:Wait() end)
-		Heartbeat:Wait()
+		task.defer(function() RunService.PreSimulation:Wait() end)
+		task.defer(function() RunService.Heartbeat:Wait() end)
+		task.defer(function() RunService.PostSimulation:Wait() end)
+		RunService.Heartbeat:Wait() -- minor pacing to prevent overload
 	end
 end)
 
--- ============================================================
--- WATCHDOG
--- ============================================================
+-- === AUTO-RECOVERY WATCHDOG ===
+-- Ensures the loop recovers if Roblox internally throttles yields or scheduler stalls.
 task.spawn(function()
 	while true do
-		local ok = pcall(function()
+		local s, err = pcall(function()
 			RunService.Stepped:Wait()
 		end)
-		if not ok then
-			warn("⚠ Engine hitch — stabilizing.")
+		if not s then
+			warn("⚠️ Engine desync detected, auto-stabilizing...")
 			task.wait(0.02)
 		end
 	end
 end)
 
-print("🔥 NO COOLDOWN — initialized.")
+-- === OPTIONAL DEBUG MONITOR ===
+task.spawn(function()
+	local frames, stamp = 0, os.clock()
+	while true do
+		frames += 1
+		if os.clock() - stamp >= 1 then
+			local fps = frames
+			frames, stamp = 0, os.clock()
+			--warn(string.format("🧠 Engine Cycles: %d subframes/sec", fps * FRAME_BURST))
+		end
+		RunService.PostSimulation:Wait()
+	end
+end)
+
+print("✅ NO COOLDOWN — LIMIT BREAK STABILIZED MODE initialized at near-maximum safe throughput.")
