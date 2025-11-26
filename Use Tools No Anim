@@ -63,7 +63,7 @@ local function updateButton()
 		toggle.TextColor3 = Color3.fromRGB(0, 0, 0)
 	else
 		toggle.Text = "NoAnimTools: OFF"
-		toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		toggle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 	end
 end
