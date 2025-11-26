@@ -1,4 +1,4 @@
--- ⚡ USE TOOLS — ULTRA OVERDRIVE ⚡
+-- ⚡ USE TOOLS ⚡
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,17 +9,17 @@ local PostSim = RunService.PostSimulation
 
 -- === GUI SETUP ===
 local gui = Instance.new("ScreenGui")
-gui.Name = "QuantumUseTools"
+gui.Name = "NoAnimUseTools"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 gui.Parent = game:GetService("CoreGui")
 
 local toggle = Instance.new("TextButton")
-toggle.Size = UDim2.new(0, 130, 0, 45)
+toggle.Size = UDim2.new(0, 165, 0, 65)
 toggle.AnchorPoint = Vector2.new(1, 0.5)
 toggle.Position = UDim2.new(1, -30, 0.5, 0)
 toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-toggle.Text = "OFF"
+toggle.Text = "NoAnimTools: OFF"
 toggle.TextSize = 22
 toggle.Font = Enum.Font.GothamBold
 toggle.TextColor3 = Color3.new(1, 1, 1)
@@ -58,11 +58,11 @@ local loopRunning = false
 
 local function updateButton()
 	if active then
-		toggle.Text = "ON"
+		toggle.Text = "NoAnimTools: ON"
 		toggle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		toggle.TextColor3 = Color3.fromRGB(0, 0, 0)
 	else
-		toggle.Text = "OFF"
+		toggle.Text = "NoAnimTools: OFF"
 		toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 		toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 	end
