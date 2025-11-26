@@ -1,5 +1,5 @@
 -- Initial Configuration
-local auraRange = 999
+local auraRange = math.huge
 local auraSize = Vector3.new(30, 30, 30)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
