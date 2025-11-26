@@ -1,4 +1,4 @@
--- Ultra Hub — Remodeled UI + Chat Commands + Full Rainbow Flow
+-- RTX Hub — Remodeled UI + Chat Commands + Full Rainbow Flow
 
 -- SERVICES
 local Players = game:GetService("Players")
@@ -52,7 +52,7 @@ local DEFAULT_THEME = {
 }
 
 local ANIM = { Time = 0.18, Style = Enum.EasingStyle.Quad, Direction = Enum.EasingDirection.Out }
-local SETTINGS_FILE = "ultrahub_settings.json"
+local SETTINGS_FILE = "rtxhub_settings.json"
 
 -- ======= Helpers (preserved & reused) =======
 local function safe_pcall(fn, ...) local ok, res = pcall(fn, ...) return ok, res end
@@ -91,8 +91,8 @@ local function loadSettings()
             end
         end
     else
-        if _G.UltraHubSettings then
-            for k,v in pairs(_G.UltraHubSettings) do Settings[k] = v end
+        if _G.RtxHubSettings then
+            for k,v in pairs(_G.RtxHubSettings) do Settings[k] = v end
         end
     end
 end
@@ -112,22 +112,22 @@ local function saveSettings()
         local ok, err = pcall(function()
             writefile(SETTINGS_FILE, HttpService:JSONEncode(copy))
         end)
-        if not ok then warn("UltraHub: failed to write settings:", err) end
+        if not ok then warn("RTX: failed to write settings:", err) end
     else
-        _G.UltraHubSettings = copy
+        _G.RtxHubSettings = copy
     end
 end
 
 loadSettings()
 
 -- ======= Remove old hub if present =======
-if PlayerGui:FindFirstChild("UltraHubGui") then
-    PlayerGui.UltraHubGui:Destroy()
+if PlayerGui:FindFirstChild("RTXHubGui") then
+    PlayerGui.RTXHubGui:Destroy()
 end
 
 -- ======= UI: ScreenGui & Mobile Scaling =======
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "UltraHubGui"
+screenGui.Name = "RTXHubGui"
 screenGui.DisplayOrder = 999
 screenGui.IgnoreGuiInset = true
 screenGui.ResetOnSpawn = false
@@ -324,7 +324,7 @@ title.Name = "Title"
 title.Size = UDim2.new(0, 340, 1, 0)
 title.Position = UDim2.new(0, 18, 0, 0)
 title.BackgroundTransparency = 1
-title.Text = "ULTRA HUB"
+title.Text = "RTX HUB"
 title.Font = Enum.Font.GothamBold
 title.TextSize = 20
 title.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
@@ -338,7 +338,7 @@ subtitle.Name = "Subtitle"
 subtitle.Size = UDim2.new(0, 420, 1, 0)
 subtitle.Position = UDim2.new(0, 175, 0, 8) -- to the right and slightly higher for visibility
 subtitle.BackgroundTransparency = 1
-subtitle.Text = "Type /hubopen | /hubclose | /hub"
+subtitle.Text = "Enjoy LIMITLESS Power"
 subtitle.Font = Enum.Font.Gotham
 subtitle.TextSize = 14
 subtitle.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
@@ -672,7 +672,7 @@ local function createActionButton(textLabel, url)
                 btn.Text = oldText
                 btn.BackgroundColor3 = Settings.Theme and Settings.Theme.Accent or DEFAULT_THEME.Accent
             else
-                warn("[UltraHub] Action failed:", res)
+                warn("[RTXHub] Action failed:", res)
                 btn.Text = "Error"
                 btn.BackgroundColor3 = Color3.fromRGB(160,50,50)
                 wait(1.2)
@@ -732,11 +732,17 @@ updatesLabel.Position = UDim2.new(0, 5, 0, 0)
 updatesLabel.BackgroundTransparency = 1
 updatesLabel.Text = [[
 📝 Updates:
-11/8/25
-- New remodeled hub UI (animated, chat-driven open/close)
-- Full rainbow flowing borders & rainbow button text
-- Mobile autoscaling & improved layout
-- Info page & toasts for commands
+
+11/28/2025
+    - RRemoved all Chat Command Logic. Hub now ONLY uses toggle button (i was tired of typing in chat)
+    - Theres now 2 use tools buttons. Ones for no anim, ones for anim. No anim provides stablity for ping, preventing it from spiking so often. With anim is stronger, but much higher chance of ping spikeage.
+    - Fixed no cooldown causing so much lag and ping spikeage.
+    |
+11/8/2025:
+    - New remodeled hub UI (animated, chat-driven open/close)
+    - Full rainbow flowing borders & rainbow button text
+    - Mobile autoscaling & improved layout
+    - Info page & toasts for commands
 ]]
 updatesLabel.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 updatesLabel.TextWrapped = true
@@ -783,25 +789,31 @@ infoLabel.BackgroundTransparency = 1
 infoLabel.Text = [[
 📝 Hub Information:
 
-- (How to open and close) - To Open the hub (You obv already figured that out) you will type /hubopen in the chat, to close the hub, you will type /hubclose in the chat.
+How to open and close: 
+    - To Open the hub (You obv already figured that out) you will type /hubopen in the chat, to close the hub, you will type /hubclose in the chat.
 
-- (Pages and buttons) - Just click on a page to open the page, and click a button to execute the corresponding script. some pages may be for special verified users only, or the creator only.
+Pages and buttons: 
+    - Just click on a page to open the page, and click a button to execute the corresponding script. some pages may be for special verified users only, or the creator only.
 
-- (Updates) - The updates page will show every new update added to the hub and/or scripts when something is changed to them, always check the updates page on execute.
+Updates: 
+    - The updates page will show every new update added to the hub and/or scripts when something is changed to them, always check the updates page on execute.
 
-- (Scripts) - Most scripts work together, but theres some things you should keep in mind before executing. DO NOT use Insta-Kill, this will sky rocket your ping. this is still a W.I.P. The attacker track is a W.I.P, this is to track whos attacking you so you can attack back. Loopbring is  little outdates and is a current W.I.P, stay tuned. 
+Scripts:
+     - Most scripts work together, but theres some things you should keep in mind before executing. DO NOT use Insta-Kill, this will sky rocket your ping. this is still a W.I.P. The attacker track is a W.I.P, this is to track whos attacking you so you can attack back. Loopbring is  little outdates and is a current W.I.P, stay tuned. 
 
-- (Scripts: Continued) - All other scripts work fine together, just be sure you know what your doing. The hub creator is not goign to waist his life teachign you hwo to use the hub an dscripts because you dont know how to read.
+    - All other scripts work fine together, just be sure you know what your doing. The hub creator is not goign to waist his life teaching you hwo to use the hub an dscripts because you dont know how to read.
 
-- (Credits) - This hub was created solley by Drew (Previously known as Dyllan) This hub took about 2 days to fully finish. very few people will have access to this version of the hub.
+    - Use Tools Anim makes you have anims when attacking, Use Tools No Anim, means there will be no anim when attacking (No Anim is better for ping contorl)
 
-- (Rules:)
+Credits: 
+    - This hub was created solley by Drew (Previously known as Dyllan) This hub took about 2 days to fully finish. very few people will have access to this version of the hub.
 
-- Do not give this hub to anyone. it is private proerty and i will end everythign you know and love if it gets into the wrong hands. 
+Rules:
+    - Do not give this hub to anyone. it is private proerty and i will end everythign you know and love if it gets into the wrong hands. 
 
-- Do not show people videos, or screenshots of the Hub unless giving permission by the hub creator, Drew.
+    - Do not show people videos, or screenshots of the Hub unless giving permission by the hub creator, Drew.
 
-- Do not use this hub to kill randoms and abuse everyone, this is meant to protect SPT from the bad hackers, not help destroy it.
+    - Do not use this hub to kill randoms and abuse everyone, this is meant to protect SPT from the bad hackers, not help destroy it.
 ]]
 infoLabel.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 infoLabel.TextWrapped = true
@@ -1154,7 +1166,7 @@ function HubAPI.Show(pageName) showPage(pageName) end
 -- Auto-execute behavior
 if Settings.AutoExecute then
     saveSettings()
-    _G.UltraHubAutoExecuted = true
+    _G.RtxHubAutoExecuted = true
 end
 
 -- Save settings periodically
@@ -1165,9 +1177,10 @@ spawn(function()
     end
 end)
 
-_G.UltraHub = HubAPI
+_G.RtxHub = HubAPI
 
--- ======= Chat command handling (open / close / toggle) with toasts & single-run toast =======
+
+-- Hub Animation
 local function hubOpenAnim()
     local scale = uiScale.Scale or 1
     local W, H = math.floor(920 * scale), math.floor(580 * scale)
@@ -1191,64 +1204,70 @@ local function toggleHub()
     end
 end
 
--- One-time startup toast
-if not _G.UltraHub_FirstSeen then
-    _G.UltraHub_FirstSeen = true
-    spawn(function()
-        showToast("SPT Hub Executed — Type /hubopen to open the hub, or /hubclose to close the hub.", 3.4, false)
-        wait(1.0)
-    end)
-end
+---------------------------------------------------------------------
+-- 🔥 RTX HUB TOGGLE BUTTON
+---------------------------------------------------------------------
 
--- Listen for chat messages from the local player
-local function handleChatCommand(txt)
-    if txt == "/hubopen" then
-        showToast("Opening hub", 1.2, true)
-        -- small delay to allow toast animation; then open hub
-        task.delay(0.9, hubOpenAnim)
-    elseif txt == "/hubclose" then
-        showToast("Closing hub", 1.2, true)
-        task.delay(0.9, hubCloseAnim)
-    elseif txt == "/hub" then
-        -- toggle with toast
-        if not main.Visible or main.Position.Y.Scale < 0 then
-            showToast("Opening hub", 1.2, true)
-            task.delay(0.9, hubOpenAnim)
-        else
-            showToast("Closing hub", 1.2, true)
-            task.delay(0.9, hubCloseAnim)
-        end
+-- Safety: ensure main & screenGui exist
+if screenGui and main and toggleHub then
+
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Name = "HubToggle"
+    toggleButton.Parent = screenGui
+
+    -- Position: Left Middle, slightly below chat bar
+    toggleButton.Size = UDim2.new(0, 130, 0, 46)
+    toggleButton.Position = UDim2.new(0, 25, 0.5, -60)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    toggleButton.BorderSizePixel = 0
+    toggleButton.AutoButtonColor = false
+    toggleButton.Text = "HUB"
+    toggleButton.Font = Enum.Font.GothamBlack
+    toggleButton.TextSize = 20
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = toggleButton
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 2
+    stroke.Color = Color3.fromRGB(255,0,0)
+    stroke.Parent = toggleButton
+
+    -- Register rainbow animation
+    if registerRainbow then
+        registerRainbow(toggleButton)
+        registerRainbow(stroke)
     end
+
+    -- Hub Toggle
+    toggleButton.MouseButton1Click:Connect(function()
+        toggleHub()
+    end)
+
+    UserInputService.InputBegan:Connect(function(key, gp)
+        if gp then return end
+        if key.KeyCode == Enum.KeyCode.H then
+            toggleHub()
+        end
+    end)
+
+    print("[RTXHub] Toggle button successfully initialized.")
+else
+    warn("[RTXHub] Toggle button could not initialize — required objects missing.")
 end
 
-if TextChatService and TextChatService.MessageReceived then
-    TextChatService.MessageReceived:Connect(function(msg)
-        local success, ps = pcall(function() return msg and msg.TextSource end)
-        local source = success and ps or nil
-        local fromLocal = false
-        if source then
-            if pcall(function() return source.Name end) and source.Name == LocalPlayer.Name then fromLocal = true end
-            if not fromLocal and pcall(function() return source.UserId end) and source.UserId == LocalPlayer.UserId then fromLocal = true end
-        end
-        if not fromLocal then return end
-        local txt = (msg.Text or ""):lower():gsub("^%s*(.-)%s*$", "%1")
-        handleChatCommand(txt)
-    end)
-else
-    -- fallback: keyboard toggles
-    UserInputService.InputBegan:Connect(function(input, processed)
-        if processed then return end
-        if input.KeyCode == Enum.KeyCode.R then
-            toggleHub()
-        end
-        if input.KeyCode == Enum.KeyCode.KeypadDivide then
-            -- extra fallback: open with slash key (if you want)
-            toggleHub()
-        end
+-- One-time startup toast
+if not _G.RtxHub_FirstSeen then
+    _G.RtxHub_FirstSeen = true
+    spawn(function()
+        showToast("SPT Hub Executed — Enjoy your LIMITLESS power.", 3.4, false)
+        wait(1.0)
     end)
 end
 
 -- ======= Finalize and initial print =======
 showPage("Info")
 
-print("[UltraHub] Remodeled UI loaded. Use chat commands /hubopen, /hubclose, /hub to control the hub.")
+print("RTX Hub Initilized")
