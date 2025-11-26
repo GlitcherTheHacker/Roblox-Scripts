@@ -1267,7 +1267,7 @@ end
 if not _G.RtxHub_FirstSeen then
     _G.RtxHub_FirstSeen = true
     spawn(function()
-        showToast("SPT Hub Executed — Enjoy your LIMITLESS power.", 3.4, false)
+        showToast("SPT Hub Executed — REMEMBER TO READ UPDATES AND INFO PAGES!!", 3.4, false)
         wait(1.0)
     end)
 end
