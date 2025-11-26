@@ -734,9 +734,10 @@ updatesLabel.Text = [[
 📝 Updates:
 
 11/28/2025
-    - RRemoved all Chat Command Logic. Hub now ONLY uses toggle button (i was tired of typing in chat)
+    - Removed all Chat Command Logic. Hub now ONLY uses toggle button (i was tired of typing in chat)
     - Theres now 2 use tools buttons. Ones for no anim, ones for anim. No anim provides stablity for ping, preventing it from spiking so often. With anim is stronger, but much higher chance of ping spikeage.
     - Fixed no cooldown causing so much lag and ping spikeage.
+    - Updated Insta-Kill so it can be usable now.
     |
 11/8/2025:
     - New remodeled hub UI (animated, chat-driven open/close)
@@ -804,6 +805,9 @@ Scripts:
     - All other scripts work fine together, just be sure you know what your doing. The hub creator is not goign to waist his life teaching you hwo to use the hub an dscripts because you dont know how to read.
 
     - Use Tools Anim makes you have anims when attacking, Use Tools No Anim, means there will be no anim when attacking (No Anim is better for ping contorl)
+        - Use Tools Anim is currently buggy, causes high ping very fast, avoid using for now.
+
+    - Attacker tracker still uses commands to open, use /tracker, and /trackerclose
 
 Credits: 
     - This hub was created solley by Drew (Previously known as Dyllan) This hub took about 2 days to fully finish. very few people will have access to this version of the hub.
