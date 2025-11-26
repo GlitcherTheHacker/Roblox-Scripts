@@ -1,81 +1,164 @@
--- Adaptive Burst Aura (network-aware, private-server friendly)
+-- ================================
+--  CONFIGURATION
+-- ================================
+local BASE_RATE = 0.025      -- Baseline delay between bursts (very fast)
+local MAX_RATE = 0.06        -- Safety cap (prevents ping spikes)
+local BURST_SIZE = 4         -- How many FightEvent fires per burst
+local ALWAYS_SPAM = true     -- Spam even with no enemies nearby
+local ENABLE_TOUCH_AURA = true
+local TOUCH_AURA_SIZE = Vector3.new(45, 45, 45)   -- Aura box size
+local AURA_RANGE = 35        -- Optional enemy-detection range (only for touch logic)
+
+-- ================================
+--  SERVICES
+-- ================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Stats = game:GetService("Stats")
 local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
 
--- CONFIG
-local auraRange = 20
-local attackRate = 0.05         -- how often we check for targets (seconds)
-local desiredTotalHits = 500    -- logical hits per detection
-local maxBatchPerWave = 25      -- how many events to send in one micro-wave
-local minWaveInterval = 0.01    -- minimum gap between waves (s)
-local maxWaveInterval = 0.1     -- maximum gap between waves (s)
-local jitter = 0.003            -- random jitter to avoid exact periodicity
+-- ================================
+--  STATE
+-- ================================
+local running = true
+local auraParams = OverlapParams.new()
+auraParams.FilterType = Enum.RaycastFilterType.Include
 
--- helper to read ping (falls back to a small default)
-local function getPingSeconds()
-    local network = Stats.Network
-    local pingStat = network and network.ServerStatsItem and network.ServerStatsItem["Data Ping"]
-    if pingStat then
-        local ms = pingStat:GetValue()
-        if ms and ms > 0 then
-            return ms / 1000
+-- ================================
+--  UTILITY FUNCTIONS
+-- ================================
+local function getChar(plr)
+    return plr and plr.Character
+end
+
+local function getHRP(plr)
+    local char = getChar(plr)
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function autoEquip(tool)
+    -- Forces the tool into the character and activates it
+    if tool and not tool:IsDescendantOf(Workspace) then
+        tool.Parent = getChar(LocalPlayer)
+    end
+
+    -- Force tool to keep swinging
+    pcall(function() tool:Activate() end)
+end
+
+local function getTouchPart(tool)
+    local touch = tool and tool:FindFirstChildWhichIsA("TouchTransmitter", true)
+    return touch and touch.Parent
+end
+
+local function getEnemyCharacters()
+    local myHRP = getHRP(LocalPlayer)
+    if not myHRP then return {}, {} end
+
+    local playersInRange = {}
+    local charList = {}
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local hrp = getHRP(plr)
+            if hrp and (hrp.Position - myHRP.Position).Magnitude <= AURA_RANGE then
+                table.insert(playersInRange, plr)
+                local ch = getChar(plr)
+                if ch then table.insert(charList, ch) end
+            end
         end
     end
-    return 0.03
+
+    return playersInRange, charList
 end
 
-local function sendBurst(fightEvent, target, totalHits)
-    -- Adaptive parameters
-    local ping = getPingSeconds()
-    -- scale waves by ping: higher ping -> fewer hits per wave and longer intervals
-    local scale = math.clamp(ping / 0.03, 0.5, 5) -- 1 at ~30ms
-    local batch = math.max(1, math.floor(maxBatchPerWave / scale))
-    local interval = math.clamp(minWaveInterval * scale, minWaveInterval, maxWaveInterval)
-
-    -- spawn a thread to send the waves without blocking main loop
-    task.spawn(function()
-        local sent = 0
-        while sent < totalHits do
-            local toSend = math.min(batch, totalHits - sent)
-            for i = 1, toSend do
-                -- Fire the remote with the single target (server must validate)
-                pcall(function()
-                    fightEvent:FireServer(target)
-                end)
-            end
-            sent = sent + toSend
-
-            -- small wait with jitter
-            local waitTime = interval + (math.random() - 0.5) * jitter
-            task.wait(waitTime)
-        end
-    end)
-end
-
--- Example usage: detect targets and call sendBurst
+-- ================================
+--  MAIN FIGHTEVENT HYPER-SPAMMER
+-- ================================
 task.spawn(function()
-    while true do
-        local myChar = LocalPlayer.Character
-        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        if myHRP then
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= LocalPlayer then
-                    local char = plr.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                    if hrp and (hrp.Position - myHRP.Position).Magnitude <= auraRange then
-                        -- find tool / event on local player
-                        local tool = myChar:FindFirstChildOfClass("Tool")
-                        local fightEvent = tool and tool:FindFirstChild("FightEvent")
-                        if fightEvent then
-                            -- send an adaptive 500-hit burst
-                            sendBurst(fightEvent, hrp, desiredTotalHits)
+    while running do
+        local char = getChar(LocalPlayer)
+        if not char then
+            task.wait(1)
+            continue
+        end
+
+        local enemies, enemyChars = getEnemyCharacters()
+        auraParams.FilterDescendantsInstances = enemyChars
+
+        ---------------------------------------------------------------------
+        -- SUPER SPAM LOOP
+        -- Always spams if ALWAYS_SPAM = true
+        -- Extra spam if players are nearby
+        ---------------------------------------------------------------------
+        for _, tool in ipairs(char:GetChildren()) do
+            if tool:IsA("Tool") then
+                local fightEvent =
+                    tool:FindFirstChild("FightEvent")
+                    or tool:FindFirstChild("Fight")
+                    or tool:FindFirstChild("Damage")
+                    or tool:FindFirstChildWhichIsA("RemoteEvent")
+
+                autoEquip(tool)
+
+                if fightEvent then
+                    -- Burst-fire FightEvent multiple times per loop
+                    for i = 1, BURST_SIZE do
+                        pcall(function()
+                            fightEvent:FireServer()
+                        end)
+                    end
+                end
+
+                -----------------------------------------------------------------
+                -- TOUCH AURA (optional)
+                -----------------------------------------------------------------
+                if ENABLE_TOUCH_AURA then
+                    local touchPart = getTouchPart(tool)
+                    if touchPart and #enemyChars > 0 then
+                        local results = Workspace:GetPartBoundsInBox(
+                            touchPart.CFrame,
+                            touchPart.Size + TOUCH_AURA_SIZE,
+                            auraParams
+                        )
+
+                        for _, part in ipairs(results) do
+                            local ancestorModel = part:FindFirstAncestorWhichIsA("Model")
+                            if ancestorModel and table.find(enemyChars, ancestorModel) then
+                                -- Touch stimulation
+                                firetouchinterest(touchPart, part, 1)
+                                firetouchinterest(touchPart, part, 0)
+                            end
                         end
                     end
                 end
             end
         end
-        task.wait(attackRate)
+
+        -- ================================================================
+        -- INTELLIGENT RATE CONTROL
+        -- Faster spam if enemies nearby
+        -- Safer rate when alone to prevent ping overflow
+        -- ================================================================
+        local nextWait
+        if ALWAYS_SPAM then
+            if #enemyChars > 0 then
+                nextWait = BASE_RATE         -- full speed
+            else
+                nextWait = (BASE_RATE + MAX_RATE) / 2   -- medium speed idle spam
+            end
+        else
+            nextWait = (#enemyChars > 0) and BASE_RATE or MAX_RATE
+        end
+
+        task.wait(nextWait)
     end
 end)
+
+-- Reset when we respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    running = true
+end)
+
+print("🔥 ULTRA FightEvent Spammer Activated — Maximum Damage Mode Online!")
