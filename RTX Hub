@@ -873,7 +873,8 @@ registerRainbow(addStroke(toolsHeader, DEFAULT_THEME.Accent, 1)); registerRainbo
 
 local tools = {
     {"Get Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Tool%20Grabber"},
-    {"Use Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Use%20Tools"},
+    {"No Anim Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Use%20Tools%20No%20Anim"},
+    {"Anim Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Use%20Tools%20Anim"},
     {"OP No Cooldown", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20No%20Coooldown"},
     {"Normla Kill Aura", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Death%20Aura.txt"},
     {"OP Insta-Kill", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Insta-Kill"},
