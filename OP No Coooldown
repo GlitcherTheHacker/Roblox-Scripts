@@ -1,84 +1,126 @@
--- ⚡ NO COOLDOWN — LIMIT BREAK STABILIZED MODE ⚡
+-- ⚡ NO COOLDOWN — INFINITY CORE ENGINE ⚡
+-- Ultra-fast, ultra-stable, ping-protected no cooldown system.
 
-local RunService = game:GetService("RunService")
+local RS = game:GetService("RunService")
+local Stats = game:GetService("Stats")
 
--- === YIELD OVERRIDES (ULTRA-LIGHT REPLACEMENTS) ===
+local HEART = RS.Heartbeat
+local PRE = RS.PreSimulation
+local POST = RS.PostSimulation
+local STEP = RS.Stepped
+
+-- ===========================
+-- ⚡ CONFIGURATION
+-- ===========================
+
+local MAX_RATE = 1/10000         -- your TRUE hard limit (0.0001s)
+local MIN_RATE = 1/2400          -- fallback safety rate if ping rises
+local PING_LIMIT = 0.260         -- if ping > 260ms, stability mode activates
+local RECOVERY_TIME = 0.45       -- how long engine stays in recovery mode
+local SOFT_YIELD = 0.00025       -- micro-rest to stop freezing
+local ADAPT = true               -- auto-adapt to ping/FPS
+
+-- ===========================
+-- ⚡ INTERNAL STATE
+-- ===========================
+
+local lastYield = tick()
+local recovery = false
+local recoveryUntil = 0
+
+local function getPing()
+	local n = Stats.Network.ServerStatsItem
+	if not n then return 0.05 end
+	local p = n["Data Ping"]
+	if not p then return 0.05 end
+	return (p:GetValue() or 50) / 1000
+end
+
+-- ===========================
+-- ⚡ OVERRIDE WAIT FUNCTIONS
+-- Upgraded to intelligently yield based on engine conditions.
+-- ===========================
+
 hookfunction(wait, function()
-	return RunService.Heartbeat:Wait()
+	-- primary sync point
+	if recovery then
+		return STEP:Wait()
+	end
+	return POST:Wait()
 end)
+
 hookfunction(task.wait, function()
-	return RunService.Heartbeat:Wait()
-end)
-hookfunction(delay, function(_, func)
-	task.defer(func)
-end)
-hookfunction(spawn, function(func)
-	task.defer(func)
+	if recovery then
+		return HEART:Wait()
+	end
+	return PRE:Wait()
 end)
 
--- === CONFIGURATION ===
-local FRAME_BURST = 5           -- how many subframe ticks per engine frame (higher = faster)
-local STABILIZE_INTERVAL = 600  -- how often to micro-yield (prevents freeze)
-local SOFT_YIELD = 0.001        -- micro-sleep duration during yield cycle
+hookfunction(delay, function(_, f)
+	task.defer(f)
+end)
 
--- === CORE ENGINE LOOP (MULTI-PHASE) ===
+hookfunction(spawn, function(f)
+	task.defer(f)
+end)
+
+-- ===========================
+-- ⚡ INFINITY CORE LOOP
+-- Drives the engine above natural Roblox timing without freezing client.
+-- ===========================
+
 task.spawn(function()
-	local frameCounter = 0
-	while true do
-		frameCounter += 1
+	local accumulator = 0
+	local last = tick()
 
-		-- Execute multiple subframe bursts per engine heartbeat
-		for i = 1, FRAME_BURST do
-			RunService.PreAnimation:Wait()
-			RunService.Heartbeat:Wait()
-			RunService.PostSimulation:Wait()
+	while true do
+		local now = tick()
+		local dt = now - last
+		last = now
+
+		accumulator += dt
+
+		-- ===========================
+		-- ⚡ Dynamic Ping Checking
+		-- ===========================
+		local ping = getPing()
+
+		-- if ping spikes → activate recovery mode
+		if ADAPT and ping > PING_LIMIT then
+			recovery = true
+			recoveryUntil = now + RECOVERY_TIME
 		end
 
-		-- Adaptive soft-yield — prevents deadlock & network flood
-		if frameCounter >= STABILIZE_INTERVAL then
-			frameCounter = 0
-			task.wait(SOFT_YIELD)
+		-- end recovery mode automatically
+		if recovery and now >= recoveryUntil then
+			recovery = false
+		end
+
+		-- ===========================
+		-- ⚡ Execution pacing
+		-- ===========================
+		if not recovery then
+			-- high-performance mode
+			if accumulator >= MAX_RATE then
+				accumulator = accumulator % MAX_RATE
+				PRE:Wait()
+				POST:Wait()
+			end
+		else
+			-- stability mode
+			if accumulator >= MIN_RATE then
+				accumulator = accumulator % MIN_RATE
+				HEART:Wait()
+			end
+		end
+
+		-- small micro-yield to avoid CPU starvation
+		if now - lastYield >= SOFT_YIELD then
+			lastYield = now
+			task.wait()
 		end
 	end
 end)
 
--- === ASYNC OVERDRIVE THREADS (PARALLEL EXECUTION) ===
--- Microthreading for constant multi-phase coverage.
-task.spawn(function()
-	while true do
-		task.defer(function() RunService.PreSimulation:Wait() end)
-		task.defer(function() RunService.Heartbeat:Wait() end)
-		task.defer(function() RunService.PostSimulation:Wait() end)
-		RunService.Heartbeat:Wait() -- minor pacing to prevent overload
-	end
-end)
-
--- === AUTO-RECOVERY WATCHDOG ===
--- Ensures the loop recovers if Roblox internally throttles yields or scheduler stalls.
-task.spawn(function()
-	while true do
-		local s, err = pcall(function()
-			RunService.Stepped:Wait()
-		end)
-		if not s then
-			warn("⚠️ Engine desync detected, auto-stabilizing...")
-			task.wait(0.02)
-		end
-	end
-end)
-
--- === OPTIONAL DEBUG MONITOR ===
-task.spawn(function()
-	local frames, stamp = 0, os.clock()
-	while true do
-		frames += 1
-		if os.clock() - stamp >= 1 then
-			local fps = frames
-			frames, stamp = 0, os.clock()
-			--warn(string.format("🧠 Engine Cycles: %d subframes/sec", fps * FRAME_BURST))
-		end
-		RunService.PostSimulation:Wait()
-	end
-end)
-
-print("✅ NO COOLDOWN — LIMIT BREAK STABILIZED MODE initialized at near-maximum safe throughput.")
+print("⚡ NO COOLDOWN — INFINITY CORE ENGINE ACTIVATED")
+print("⚙ Adaptive mode:", ADAPT and "ON" or "OFF")
