@@ -1,18 +1,13 @@
--- ⚡ USE TOOLS ⚡
+-- ⚡ USE TOOLS — ULTRA OVERDRIVE ⚡
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
+
 local player = Players.LocalPlayer
-
-local Heartbeat = RunService.Heartbeat
-local PreSim = RunService.PreSimulation
 local PostSim = RunService.PostSimulation
-local RenderStep = RunService.RenderStepped
 
--- ============================================================
--- 🔮 UI — BLACK + RAINBOW GLOW / TEXT EFFECT
--- ============================================================
+-- === GUI SETUP ===
 local gui = Instance.new("ScreenGui")
 gui.Name = "QuantumUseTools"
 gui.ResetOnSpawn = false
@@ -57,149 +52,108 @@ task.spawn(function()
 	end
 end)
 
--- ============================================================
--- 🧠 STATE
--- ============================================================
+-- === STATE ===
 local active = false
 local loopRunning = false
 
 local function updateButton()
 	if active then
 		toggle.Text = "ON"
+		toggle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		toggle.TextColor3 = Color3.fromRGB(0, 0, 0)
 	else
 		toggle.Text = "OFF"
+		toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 	end
 end
 
--- ============================================================
--- 🔥 TOOL HANDLERS
--- ============================================================
-local function equipAll()
+-- === TOOL HANDLERS ===
+local function equipAllTools()
 	local char = player.Character
 	if not char then return end
-	local bp = player.Backpack
-	if not bp then return end
-	for _, tool in ipairs(bp:GetChildren()) do
-		if tool:IsA("Tool") then
-			tool.Parent = char
+	local backpack = player:FindFirstChild("Backpack")
+	if backpack then
+		for _, tool in ipairs(backpack:GetChildren()) do
+			if tool:IsA("Tool") then
+				tool.Parent = char
+			end
 		end
 	end
 end
 
-local function activateTools()
+local function unequipAllTools()
 	local char = player.Character
 	if not char then return end
-	for _, tool in ipairs(char:GetChildren()) do
-		if tool:IsA("Tool") then
-			-- MULTI-SPAM ACTIVATION
-			task.defer(function() pcall(function() tool:Activate() end) end)
-			task.defer(function() pcall(function() tool:Activate() end) end)
-			pcall(function() tool:Activate() end)
-			pcall(function() tool:Activate() end)
+	local backpack = player:FindFirstChild("Backpack")
+	if backpack then
+		for _, tool in ipairs(char:GetChildren()) do
+			if tool:IsA("Tool") then
+				tool.Parent = backpack
+			end
 		end
 	end
 end
 
-local function unequipTools()
-	local char = player.Character
-	if not char then return end
-	local bp = player:FindFirstChild("Backpack")
-	if not bp then return end
-	for _, tool in ipairs(char:GetChildren()) do
-		if tool:IsA("Tool") then
-			tool.Parent = bp
-		end
-	end
-end
-
--- ============================================================
--- 🚀 QUANTUM EVENT LOOP — MAXIMUM NO-COOLDOWN SPEED
--- ============================================================
-local function startLoop()
+-- === ULTRA-FAST LOOP ===
+local function toolLoop()
 	if loopRunning then return end
 	loopRunning = true
-
 	task.spawn(function()
 		while true do
 			if active then
-				equipAll()       -- ensure tools stay equipped
-				activateTools()  -- spam activations
+				local char = player.Character
+				if char then
+					equipAllTools()
+					for _, tool in ipairs(char:GetChildren()) do
+						if tool:IsA("Tool") then
+							pcall(function()
+								tool:Activate()
+							end)
+						end
+					end
+				end
 			end
-			PostSim:Wait()
-		end
-	end)
-
-	task.spawn(function()
-		while true do
-			if active then
-				activateTools()
-			end
-			Heartbeat:Wait()
-		end
-	end)
-
-	task.spawn(function()
-		while true do
-			if active then
-				activateTools()
-			end
-			PreSim:Wait()
-		end
-	end)
-
-	task.spawn(function()
-		while true do
-			if active then
-				activateTools()
-			end
-			RenderStep:Wait()
+			PostSim:Wait() -- Subframe precision tick
 		end
 	end)
 end
 
--- ============================================================
--- 🎛 TOGGLE & INPUT
--- ============================================================
+-- === TOGGLE FUNCTIONALITY ===
 local function toggleState()
 	active = not active
 	updateButton()
-
 	if active then
-		equipAll()
+		equipAllTools()
 	else
-		unequipTools()
+		unequipAllTools() -- Instantly unequip all tools when toggled off
 	end
-
 	if not loopRunning then
-		startLoop()
+		toolLoop()
 	end
 end
 
+-- === INPUT BINDINGS ===
 toggle.MouseButton1Click:Connect(toggleState)
-
-UIS.InputBegan:Connect(function(input, gpe)
-	if not gpe and input.KeyCode == Enum.KeyCode.Q then
+UIS.InputBegan:Connect(function(input, gp)
+	if not gp and input.KeyCode == Enum.KeyCode.Q then
 		toggleState()
 	end
 end)
 
--- ============================================================
--- 🧬 CHARACTER SUPPORT
--- ============================================================
+-- === CHARACTER HANDLER ===
 player.CharacterAdded:Connect(function(char)
-	char:WaitForChild("HumanoidRootPart", 2)
-	task.wait(0.1)
+	char:WaitForChild("HumanoidRootPart", 3)
 	if active then
-		equipAll()
+		task.wait(0.1)
+		equipAllTools()
 	else
-		unequipTools()
+		task.wait(0.1)
+		unequipAllTools()
 	end
 end)
 
--- ============================================================
--- INIT
--- ============================================================
+-- === INIT ===
 updateButton()
-startLoop()
-
-print("⚔️ USE TOOLS Initialized")
+toolLoop()
+print("⚙️ USE TOOLS — Initialized")
