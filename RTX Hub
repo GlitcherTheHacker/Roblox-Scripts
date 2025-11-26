@@ -1,4 +1,4 @@
--- RTX Hub — Remodeled UI + Chat Commands + Full Rainbow Flow
+-- RTX Hub 
 
 -- SERVICES
 local Players = game:GetService("Players")
