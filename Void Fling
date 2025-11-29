@@ -1,0 +1,116 @@
+--!strict
+-- Script: Flings dead player bodies + their tools into the void
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+-- Settings
+local FLING_VELOCITY = -2000 -- downward velocity to fling to the void
+local DETECTION_RADIUS = 5 -- how close you need to be to trigger fling
+local BODY_LIFETIME = 10 -- how long to keep dead bodies in workspace before cleaning up
+
+-- Table to track temporary dead bodies
+local deadBodies = {}
+
+-- Utility: clone tools into body model
+local function cloneToolsToBody(player, bodyModel)
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") then
+                local clone = tool:Clone()
+                clone.Parent = bodyModel
+                -- Optional: anchor temporarily so it sticks with body
+                if clone:FindFirstChild("Handle") then
+                    clone.Handle.Anchored = false
+                end
+            end
+        end
+    end
+end
+
+-- Function to handle dead player
+local function onPlayerDied(player)
+    if not player.Character then return end
+    local char = player.Character:Clone()
+    char.Name = player.Name .. "_DeadBody"
+    
+    -- Move cloned character to same position
+    char:SetPrimaryPartCFrame(player.Character.PrimaryPart.CFrame)
+    
+    -- Unanchor all parts so they can move freely
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.Anchored = false
+        end
+    end
+    
+    -- Clone backpack tools into body
+    cloneToolsToBody(player, char)
+    
+    -- Parent to workspace
+    char.Parent = Workspace
+    
+    -- Track the dead body
+    table.insert(deadBodies, char)
+    
+    -- Clean up after a delay
+    delay(BODY_LIFETIME, function()
+        if char then
+            char:Destroy()
+        end
+    end)
+end
+
+-- Connect to players
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(char)
+        local humanoid = char:WaitForChild("Humanoid")
+        humanoid.Died:Connect(function()
+            onPlayerDied(player)
+        end)
+    end)
+end)
+
+-- Function to fling dead bodies when touched
+local function flingDeadBodies(player)
+    if not player.Character or not player.Character.PrimaryPart then return end
+    local root = player.Character.PrimaryPart
+    
+    for i = #deadBodies, 1, -1 do
+        local body = deadBodies[i]
+        if body and body.PrimaryPart then
+            local distance = (root.Position - body.PrimaryPart.Position).Magnitude
+            if distance <= DETECTION_RADIUS then
+                -- Apply extreme downward velocity
+                for _, part in ipairs(body:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        local bv = Instance.new("BodyVelocity")
+                        bv.Velocity = Vector3.new(0, FLING_VELOCITY, 0)
+                        bv.MaxForce = Vector3.new(0, math.huge, 0)
+                        bv.P = 100000
+                        bv.Parent = part
+                        
+                        -- Optional: remove BodyVelocity after 2 seconds to free resources
+                        delay(2, function()
+                            if bv then bv:Destroy() end
+                        end)
+                    end
+                end
+                
+                -- Remove from tracked table
+                table.remove(deadBodies, i)
+            end
+        else
+            table.remove(deadBodies, i)
+        end
+    end
+end
+
+-- Run a loop to detect player collisions with dead bodies
+RunService.Heartbeat:Connect(function()
+    for _, player in ipairs(Players:GetPlayers()) do
+        flingDeadBodies(player)
+    end
+end)
