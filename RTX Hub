@@ -1117,10 +1117,11 @@ end)
 local btnWelcome = createSidebarButton("Welcome", 1)
 local btnInfo = createSidebarButton("Info", 2); btnInfo.SetAccent(true)
 local btnUpdates = createSidebarButton("Updates", 3)
-local btnTools = createSidebarButton("Tool Scripts", 4)
-local btnPlayer = createSidebarButton("Player Scripts", 5)
-local btnOther = createSidebarButton("Other Scripts", 6)
-local btnSettings = createSidebarButton("Settings", 7)
+local btnTest = createSidebarButton("Test Scripts", 4)
+local btnTools = createSidebarButton("Tool Scripts", 5)
+local btnPlayer = createSidebarButton("Player Scripts", 6)
+local btnOther = createSidebarButton("Other Scripts", 7)
+local btnSettings = createSidebarButton("Settings", 8)
 
 -- ======= Dragging (PC + Mobile) =======
 local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
