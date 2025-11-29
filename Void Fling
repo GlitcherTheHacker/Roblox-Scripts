@@ -1,116 +1,132 @@
---!strict
--- Script: Flings dead player bodies + their tools into the void
+--[[
+    ⚡ VOID YEETER v1.0 — Physics-Based Anti-Godmode Flinger
+    - Walk into any player (alive or dead)
+    - Their HRP gets launched *straight downward* into the void
+    - They get deleted by the server
+    - Includes HRP Highlights
+    - Ping-safe, FPS-safe, FE-compatible
+]]
 
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 
--- Settings
-local FLING_VELOCITY = -2000 -- downward velocity to fling to the void
-local DETECTION_RADIUS = 5 -- how close you need to be to trigger fling
-local BODY_LIFETIME = 10 -- how long to keep dead bodies in workspace before cleaning up
+local LocalPlayer = Players.LocalPlayer
+local CH = {}
+local ACTIVE = true  -- toggle if you want
 
--- Table to track temporary dead bodies
-local deadBodies = {}
+---------------------------------------------------------
+-- 🔥 HIGHLIGHT SYSTEM (Shows all HumanoidRootParts)
+---------------------------------------------------------
 
--- Utility: clone tools into body model
-local function cloneToolsToBody(player, bodyModel)
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then
-        for _, tool in ipairs(backpack:GetChildren()) do
-            if tool:IsA("Tool") then
-                local clone = tool:Clone()
-                clone.Parent = bodyModel
-                -- Optional: anchor temporarily so it sticks with body
-                if clone:FindFirstChild("Handle") then
-                    clone.Handle.Anchored = false
-                end
-            end
-        end
-    end
+local function highlight(part)
+    if part:FindFirstChild("VoidHL") then return end
+
+    local hl = Instance.new("Highlight")
+    hl.Name = "VoidHL"
+    hl.FillTransparency = 1
+    hl.OutlineTransparency = 0
+    hl.OutlineColor = Color3.fromRGB(0,255,255)
+    hl.Adornee = part
+    hl.Parent = part
 end
 
--- Function to handle dead player
-local function onPlayerDied(player)
-    if not player.Character then return end
-    local char = player.Character:Clone()
-    char.Name = player.Name .. "_DeadBody"
-    
-    -- Move cloned character to same position
-    char:SetPrimaryPartCFrame(player.Character.PrimaryPart.CFrame)
-    
-    -- Unanchor all parts so they can move freely
-    for _, part in ipairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.Anchored = false
-        end
-    end
-    
-    -- Clone backpack tools into body
-    cloneToolsToBody(player, char)
-    
-    -- Parent to workspace
-    char.Parent = Workspace
-    
-    -- Track the dead body
-    table.insert(deadBodies, char)
-    
-    -- Clean up after a delay
-    delay(BODY_LIFETIME, function()
-        if char then
-            char:Destroy()
+local function registerCharacter(char)
+    task.spawn(function()
+        local hrp = char:WaitForChild("HumanoidRootPart", 3)
+        if hrp then
+            highlight(hrp)
         end
     end)
 end
 
--- Connect to players
-Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function(char)
-        local humanoid = char:WaitForChild("Humanoid")
-        humanoid.Died:Connect(function()
-            onPlayerDied(player)
-        end)
-    end)
+for _,plr in ipairs(Players:GetPlayers()) do
+    if plr ~= LocalPlayer then
+        if plr.Character then registerCharacter(plr.Character) end
+        plr.CharacterAdded:Connect(registerCharacter)
+    end
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(registerCharacter)
 end)
 
--- Function to fling dead bodies when touched
-local function flingDeadBodies(player)
-    if not player.Character or not player.Character.PrimaryPart then return end
-    local root = player.Character.PrimaryPart
-    
-    for i = #deadBodies, 1, -1 do
-        local body = deadBodies[i]
-        if body and body.PrimaryPart then
-            local distance = (root.Position - body.PrimaryPart.Position).Magnitude
-            if distance <= DETECTION_RADIUS then
-                -- Apply extreme downward velocity
-                for _, part in ipairs(body:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        local bv = Instance.new("BodyVelocity")
-                        bv.Velocity = Vector3.new(0, FLING_VELOCITY, 0)
-                        bv.MaxForce = Vector3.new(0, math.huge, 0)
-                        bv.P = 100000
-                        bv.Parent = part
-                        
-                        -- Optional: remove BodyVelocity after 2 seconds to free resources
-                        delay(2, function()
-                            if bv then bv:Destroy() end
-                        end)
-                    end
-                end
-                
-                -- Remove from tracked table
-                table.remove(deadBodies, i)
-            end
-        else
-            table.remove(deadBodies, i)
-        end
-    end
+---------------------------------------------------------
+-- 🔥 HARD FLING DOWNWARD SYSTEM
+---------------------------------------------------------
+
+local function getHRP(char)
+    return char and char:FindFirstChild("HumanoidRootPart")
 end
 
--- Run a loop to detect player collisions with dead bodies
+local function voidFling(victimHRP)
+    if not victimHRP then return end
+    -- physics must exist
+    if victimHRP.Anchored then
+        -- try to un-anchor clientside to allow forcing it
+        pcall(function() victimHRP.Anchored = false end)
+    end
+
+    -- apply extremely strong downward force
+    -- BodyVelocity is still respected by server generally
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(9e9,9e9,9e9)
+    bv.Velocity = Vector3.new(0, -500, 0)
+    bv.Parent = victimHRP
+
+    -- remove later
+    task.delay(0.35, function()
+        bv:Destroy()
+    end)
+end
+
+---------------------------------------------------------
+-- 🔥 CONTACT DETECTION — When YOU get near ANY HRP
+---------------------------------------------------------
+
+local function getLocalHRP()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local DETECT_RADIUS = 7       -- how close before they get voided
+local COOLDOWN_TIME = 0.1     -- prevent double-flings
+local recentHits = {}
+
+local function canHit(plr)
+    if not recentHits[plr] then return true end
+    return (tick() - recentHits[plr]) > COOLDOWN_TIME
+end
+
+local function recordHit(plr)
+    recentHits[plr] = tick()
+end
+
+---------------------------------------------------------
+-- 🔥 MAIN LOOP
+---------------------------------------------------------
+
 RunService.Heartbeat:Connect(function()
-    for _, player in ipairs(Players:GetPlayers()) do
-        flingDeadBodies(player)
+    if not ACTIVE then return end
+
+    local myHRP = getLocalHRP()
+    if not myHRP then return end
+
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+
+            local char = plr.Character
+            local hrp = getHRP(char)
+            if hrp then
+                local dist = (hrp.Position - myHRP.Position).Magnitude
+
+                -- Only fling if very close, simulating "walk into"
+                if dist <= DETECT_RADIUS and canHit(plr) then
+                    recordHit(plr)
+                    voidFling(hrp)
+                end
+            end
+        end
     end
 end)
+
+print("⚡ VOID YEETER v1.0 — Activated")
