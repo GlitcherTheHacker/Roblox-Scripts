@@ -11,6 +11,7 @@ local TextChatService = game:GetService("TextChatService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+-- ======= Hub Whitelist =======
 local whitelist = {
     [3972688973] = true, -- Main Acc
     [2522193455] = true, -- (Alt)
@@ -29,7 +30,7 @@ if not whitelist[player.UserId] then
     return
 end
 
--- ======= Verification System (unchanged) =======
+-- ======= Page Whitelist =======
 local VERIFIED_USERS = {
     2522193455, -- Hub Creator
     4449347130, -- Alt
