@@ -740,7 +740,7 @@ updatesLabel.Text = [[
     - Updated Anim Tools - No Loner Laggy
     - Split apart Float Tool and Reach, both are no seperate button found in the "Other Scripts" Page
     - Updated and Improved Get tools ]
-    - Removed Secret Scripts Page, it was kinda useless. I'll add the scritp on this page to "Other Scripts"
+    - Removed Secret Scripts Page, it was kinda useless. I'll add the scripts on this page to "Other Scripts"
 
     Thas all for today fokes, enjoy ;)
     |
@@ -913,7 +913,7 @@ registerRainbow(addStroke(oHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(oH
 local otherScripts = {
     {"Float Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Float%20Tools"},
     {"Reach", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Reach"},
-    {"Attacker Tarcker, "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Attacker%20Tracker"},
+    {"Attacker Tarcker", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Attacker%20Tracker"},
     {"Axe Smash Spam", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Axe%20Smash%20Spam"},
 }
 for i,t in ipairs(otherScripts) do
