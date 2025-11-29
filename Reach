@@ -1,3 +1,7 @@
+-- Services
+local Players = game.GetService{"Players"}
+local player = Players.LocalPlayer
+
 -- Adjust a tool's grip position (makes tools visually closer/tighter)
 local function adjustToolGrip(tool)
     if tool:IsA("Tool") then
