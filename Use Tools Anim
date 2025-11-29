@@ -1,205 +1,151 @@
--- ⚡ USE TOOLS ⚡
+-- ⚔️ ULTRA USE TOOLS — ANIM SAFE PERFORMANCE EDITION ⚔️
+-- Maximum animation-enabled power without network overflow
 
+----------------------------------------------------------------
+-- SERVCES
+----------------------------------------------------------------
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
-local player = Players.LocalPlayer
-
+local Player = Players.LocalPlayer
 local Heartbeat = RunService.Heartbeat
-local PreSim = RunService.PreSimulation
-local PostSim = RunService.PostSimulation
-local RenderStep = RunService.RenderStepped
 
--- ============================================================
--- 🔮 UI — BLACK + RAINBOW GLOW / TEXT EFFECT
--- ============================================================
+----------------------------------------------------------------
+-- CONFIG (PEAK SAFE VALUES)
+----------------------------------------------------------------
+local ACTIVATES_PER_FRAME = 3   -- DO NOT exceed 4 unless you want ping spikes
+local TOGGLE_KEY = Enum.KeyCode.E
+
+----------------------------------------------------------------
+-- UI
+----------------------------------------------------------------
 local gui = Instance.new("ScreenGui")
-gui.Name = "AnimUseTools"
+gui.Name = "AnimUseToolsSafe"
 gui.ResetOnSpawn = false
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+gui.IgnoreGuiInset = true
 gui.Parent = game:GetService("CoreGui")
 
 local toggle = Instance.new("TextButton")
-toggle.Size = UDim2.new(0, 165, 0, 65)
-toggle.AnchorPoint = Vector2.new(1, 0.5)
-toggle.Position = UDim2.new(1, -30, 0.6, 0)
-toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-toggle.Text = "AnimTools: OFF"
-toggle.TextSize = 22
+toggle.Size = UDim2.new(0,165,0,65)
+toggle.AnchorPoint = Vector2.new(1,0.5)
+toggle.Position = UDim2.new(1,-30,0.6,0)
+toggle.BackgroundColor3 = Color3.fromRGB(0,0,0)
 toggle.Font = Enum.Font.GothamBold
-toggle.TextColor3 = Color3.new(1, 1, 1)
+toggle.TextScaled = true
 toggle.BorderSizePixel = 0
-toggle.Active = true
-toggle.Draggable = true
+toggle.Text = "AnimTools: OFF"
 toggle.Parent = gui
 
-local corner = Instance.new("UICorner", toggle)
-corner.CornerRadius = UDim.new(0.35, 0)
+Instance.new("UICorner",toggle).CornerRadius = UDim.new(0.35,0)
 
--- RAINBOW OUTLINE EFFECT
 local outline = Instance.new("UIStroke", toggle)
-outline.Thickness = 2.8
-outline.Color = Color3.fromRGB(255, 0, 255)
-outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+outline.Thickness = 2.6
 
--- RAINBOW ANIMATION THREAD
 task.spawn(function()
 	local t = 0
-	while true do
-		t += 0.015
-		local r = (math.sin(t) * .5 + .5)
-		local g = (math.sin(t + 2) * .5 + .5)
-		local b = (math.sin(t + 4) * .5 + .5)
-		local col = Color3.new(r, g, b)
-		outline.Color = col
-		toggle.TextColor3 = col
+	while toggle.Parent do
+		t += 0.02
+		outline.Color = Color3.fromHSV(t % 1,1,1)
+		toggle.TextColor3 = outline.Color
 		task.wait()
 	end
 end)
 
--- ============================================================
--- 🧠 STATE
--- ============================================================
+----------------------------------------------------------------
+-- STATE
+----------------------------------------------------------------
 local active = false
-local loopRunning = false
 
-local function updateButton()
-	if active then
-		toggle.Text = "AnimTools: ON"
-	else
-		toggle.Text = "AnimTools: OFF"
-	end
+local function updateUI()
+	toggle.Text = active and "AnimTools: ON" or "AnimTools: OFF"
 end
 
--- ============================================================
--- 🔥 TOOL HANDLERS
--- ============================================================
+----------------------------------------------------------------
+-- TOOL CONTROL
+----------------------------------------------------------------
 local function equipAll()
-	local char = player.Character
+	local char = Player.Character
 	if not char then return end
-	local bp = player.Backpack
-	if not bp then return end
-	for _, tool in ipairs(bp:GetChildren()) do
+
+	for _, tool in ipairs(Player.Backpack:GetChildren()) do
 		if tool:IsA("Tool") then
 			tool.Parent = char
 		end
 	end
 end
 
-local function activateTools()
-	local char = player.Character
+local function unequipAll()
+	local char = Player.Character
 	if not char then return end
+
 	for _, tool in ipairs(char:GetChildren()) do
 		if tool:IsA("Tool") then
-			-- MULTI-SPAM ACTIVATION
-			task.defer(function() pcall(function() tool:Activate() end) end)
-			task.defer(function() pcall(function() tool:Activate() end) end)
-			pcall(function() tool:Activate() end)
-			pcall(function() tool:Activate() end)
+			tool.Parent = Player.Backpack
 		end
 	end
 end
 
-local function unequipTools()
-	local char = player.Character
+----------------------------------------------------------------
+-- SAFE ANIMATION SPAM LOOP
+----------------------------------------------------------------
+Heartbeat:Connect(function()
+
+	if not active then return end
+
+	local char = Player.Character
 	if not char then return end
-	local bp = player:FindFirstChild("Backpack")
-	if not bp then return end
+
 	for _, tool in ipairs(char:GetChildren()) do
 		if tool:IsA("Tool") then
-			tool.Parent = bp
+
+			for i = 1, ACTIVATES_PER_FRAME do
+				pcall(tool.Activate, tool)
+			end
+
 		end
 	end
-end
 
--- ============================================================
--- 🚀 QUANTUM EVENT LOOP — MAXIMUM NO-COOLDOWN SPEED
--- ============================================================
-local function startLoop()
-	if loopRunning then return end
-	loopRunning = true
+end)
 
-	task.spawn(function()
-		while true do
-			if active then
-				equipAll()       -- ensure tools stay equipped
-				activateTools()  -- spam activations
-			end
-			PostSim:Wait()
-		end
-	end)
-
-	task.spawn(function()
-		while true do
-			if active then
-				activateTools()
-			end
-			Heartbeat:Wait()
-		end
-	end)
-
-	task.spawn(function()
-		while true do
-			if active then
-				activateTools()
-			end
-			PreSim:Wait()
-		end
-	end)
-
-	task.spawn(function()
-		while true do
-			if active then
-				activateTools()
-			end
-			RenderStep:Wait()
-		end
-	end)
-end
-
--- ============================================================
--- 🎛 TOGGLE & INPUT
--- ============================================================
+----------------------------------------------------------------
+-- TOGGLE
+----------------------------------------------------------------
 local function toggleState()
+
 	active = not active
-	updateButton()
+	updateUI()
 
 	if active then
 		equipAll()
 	else
-		unequipTools()
+		unequipAll()
 	end
 
-	if not loopRunning then
-		startLoop()
-	end
 end
 
 toggle.MouseButton1Click:Connect(toggleState)
 
-UIS.InputBegan:Connect(function(input, gpe)
-	if not gpe and input.KeyCode == Enum.KeyCode.E then
+UIS.InputBegan:Connect(function(input, gp)
+	if not gp and input.KeyCode == TOGGLE_KEY then
 		toggleState()
 	end
 end)
 
--- ============================================================
--- 🧬 CHARACTER SUPPORT
--- ============================================================
-player.CharacterAdded:Connect(function(char)
-	char:WaitForChild("HumanoidRootPart", 2)
+----------------------------------------------------------------
+-- CHARACTER SUPPORT
+----------------------------------------------------------------
+Player.CharacterAdded:Connect(function()
 	task.wait(0.1)
+
 	if active then
 		equipAll()
 	else
-		unequipTools()
+		unequipAll()
 	end
 end)
 
--- ============================================================
+----------------------------------------------------------------
 -- INIT
--- ============================================================
-updateButton()
-startLoop()
-
-print("⚔️ USE TOOLS Initialized")
+----------------------------------------------------------------
+updateUI()
+print("⚔️ ULTRA USE TOOLS — ANIM SAFE PERFORMANCE MODE READY")
