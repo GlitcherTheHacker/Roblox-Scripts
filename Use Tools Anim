@@ -1,5 +1,4 @@
--- ⚡ USE TOOLS — PEAK STABILITY EDITION ⚡
--- Maximum DPS without ping explosion
+-- ⚡ USE TOOLS ⚡
 
 ----------------------------------------------------------------
 -- SERVICES
@@ -179,4 +178,4 @@ end)
 
 updateButton()
 
-print("⚔️ USE TOOLS — PEAK STABILITY LOADED")
+print("⚔️ USE TOOLS INITILIZED")
