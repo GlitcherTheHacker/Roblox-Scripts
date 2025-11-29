@@ -1,28 +1,27 @@
--- ⚔️ ULTRA USE TOOLS — ANIM SAFE PERFORMANCE EDITION ⚔️
--- Maximum animation-enabled power without network overflow
+-- ⚡ USE TOOLS — PEAK STABILITY EDITION ⚡
+-- Maximum DPS without ping explosion
 
 ----------------------------------------------------------------
--- SERVCES
+-- SERVICES
 ----------------------------------------------------------------
-local Players = game:GetService("Players")
+local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
-local Player = Players.LocalPlayer
-local Heartbeat = RunService.Heartbeat
+local UIS        = game:GetService("UserInputService")
+local player     = Players.LocalPlayer
 
 ----------------------------------------------------------------
--- CONFIG (PEAK SAFE VALUES)
+-- CONFIG — SAFE POWER LIMITS
 ----------------------------------------------------------------
-local ACTIVATES_PER_FRAME = 3   -- DO NOT exceed 4 unless you want ping spikes
-local TOGGLE_KEY = Enum.KeyCode.E
+local ACTIVATIONS_PER_SECOND = 18   -- per tool (safe cap)
+local EQUIP_REFRESH_RATE     = 0.25 -- ensure re-equip every quarter second
 
 ----------------------------------------------------------------
--- UI
+-- UI — BLACK + RAINBOW
 ----------------------------------------------------------------
 local gui = Instance.new("ScreenGui")
-gui.Name = "AnimUseToolsSafe"
+gui.Name = "AnimUseTools"
 gui.ResetOnSpawn = false
-gui.IgnoreGuiInset = true
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 gui.Parent = game:GetService("CoreGui")
 
 local toggle = Instance.new("TextButton")
@@ -30,23 +29,29 @@ toggle.Size = UDim2.new(0,165,0,65)
 toggle.AnchorPoint = Vector2.new(1,0.5)
 toggle.Position = UDim2.new(1,-30,0.6,0)
 toggle.BackgroundColor3 = Color3.fromRGB(0,0,0)
-toggle.Font = Enum.Font.GothamBold
-toggle.TextScaled = true
-toggle.BorderSizePixel = 0
 toggle.Text = "AnimTools: OFF"
+toggle.TextSize = 22
+toggle.Font = Enum.Font.GothamBold
+toggle.TextColor3 = Color3.new(1,1,1)
+toggle.BorderSizePixel = 0
+toggle.Active = true
+toggle.Draggable = true
 toggle.Parent = gui
 
-Instance.new("UICorner",toggle).CornerRadius = UDim.new(0.35,0)
+local corner = Instance.new("UICorner", toggle)
+corner.CornerRadius = UDim.new(0.35,0)
 
 local outline = Instance.new("UIStroke", toggle)
-outline.Thickness = 2.6
+outline.Thickness = 2.8
+outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
 task.spawn(function()
 	local t = 0
-	while toggle.Parent do
-		t += 0.02
-		outline.Color = Color3.fromHSV(t % 1,1,1)
-		toggle.TextColor3 = outline.Color
+	while true do
+		t += .015
+		local col = Color3.fromHSV(t % 1,1,1)
+		outline.Color = col
+		toggle.TextColor3 = col
 		task.wait()
 	end
 end)
@@ -55,97 +60,123 @@ end)
 -- STATE
 ----------------------------------------------------------------
 local active = false
+local equipTick = 0
 
-local function updateUI()
+local function updateButton()
 	toggle.Text = active and "AnimTools: ON" or "AnimTools: OFF"
 end
 
 ----------------------------------------------------------------
--- TOOL CONTROL
+-- TOOL FUNCTIONS
 ----------------------------------------------------------------
+
 local function equipAll()
-	local char = Player.Character
-	if not char then return end
+	local char = player.Character
+	local bp   = player.Backpack
+	if not char or not bp then return end
 
-	for _, tool in ipairs(Player.Backpack:GetChildren()) do
-		if tool:IsA("Tool") then
-			tool.Parent = char
+	for _, t in ipairs(bp:GetChildren()) do
+		if t:IsA("Tool") then
+			t.Parent = char
 		end
 	end
 end
 
-local function unequipAll()
-	local char = Player.Character
+local function unequipTools()
+	local char = player.Character
+	local bp = player.Backpack
+	if not char or not bp then return end
+
+	for _, t in ipairs(char:GetChildren()) do
+		if t:IsA("Tool") then
+			t.Parent = bp
+		end
+	end
+end
+
+local function activateTools()
+	local char = player.Character
 	if not char then return end
 
-	for _, tool in ipairs(char:GetChildren()) do
-		if tool:IsA("Tool") then
-			tool.Parent = Player.Backpack
+	for _, t in ipairs(char:GetChildren()) do
+		if t:IsA("Tool") then
+			pcall(function()
+				t:Activate()
+			end)
 		end
 	end
 end
 
 ----------------------------------------------------------------
--- SAFE ANIMATION SPAM LOOP
+-- MAIN LOOP — PACED BURST ENGINE
 ----------------------------------------------------------------
-Heartbeat:Connect(function()
+
+local lastPulse = 0
+local pulseDelay = 1 / ACTIVATIONS_PER_SECOND
+
+RunService.Heartbeat:Connect(function(dt)
 
 	if not active then return end
 
-	local char = Player.Character
-	if not char then return end
+	-- Equip refresh (stability safety)
+	equipTick += dt
+	if equipTick >= EQUIP_REFRESH_RATE then
+		equipTick = 0
+		equipAll()
+	end
 
-	for _, tool in ipairs(char:GetChildren()) do
-		if tool:IsA("Tool") then
-
-			for i = 1, ACTIVATES_PER_FRAME do
-				pcall(tool.Activate, tool)
-			end
-
-		end
+	-- Activation pulse limiter
+	if (tick() - lastPulse) >= pulseDelay then
+		lastPulse = tick()
+		activateTools()
 	end
 
 end)
 
 ----------------------------------------------------------------
--- TOGGLE
+-- TOGGLE + INPUT
 ----------------------------------------------------------------
+
 local function toggleState()
 
 	active = not active
-	updateUI()
+	updateButton()
 
 	if active then
 		equipAll()
 	else
-		unequipAll()
+		unequipTools()
 	end
 
 end
 
 toggle.MouseButton1Click:Connect(toggleState)
 
-UIS.InputBegan:Connect(function(input, gp)
-	if not gp and input.KeyCode == TOGGLE_KEY then
+UIS.InputBegan:Connect(function(input,gpe)
+	if not gpe and input.KeyCode == Enum.KeyCode.E then
 		toggleState()
 	end
 end)
 
 ----------------------------------------------------------------
--- CHARACTER SUPPORT
+-- CHARACTER HANDLING
 ----------------------------------------------------------------
-Player.CharacterAdded:Connect(function()
-	task.wait(0.1)
+
+player.CharacterAdded:Connect(function()
+	task.wait(.1)
 
 	if active then
 		equipAll()
 	else
-		unequipAll()
+		unequipTools()
 	end
+
 end)
 
 ----------------------------------------------------------------
 -- INIT
 ----------------------------------------------------------------
-updateUI()
-print("⚔️ ULTRA USE TOOLS — ANIM SAFE PERFORMANCE MODE READY")
+
+updateButton()
+
+print("⚔️ USE TOOLS — PEAK STABILITY LOADED")
