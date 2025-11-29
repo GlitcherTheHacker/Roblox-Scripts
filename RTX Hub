@@ -30,18 +30,6 @@ if not whitelist[player.UserId] then
     return
 end
 
--- ======= Page Whitelist =======
-local VERIFIED_USERS = {
-    2522193455, -- Hub Creator
-    4449347130, -- Alt
-    9407037318, -- Messi
-    1989950303, -- Lucky
-}
-local function isVerified(userId)
-    for _, id in ipairs(VERIFIED_USERS) do if id == userId then return true end end
-    return false
-end
-
 -- ======= Config / Defaults (preserved) =======
 local DEFAULT_THEME = {
     Accent = Color3.fromRGB(98, 53, 255),
@@ -748,6 +736,15 @@ updatesLabel.BackgroundTransparency = 1
 updatesLabel.Text = [[
 📝 Updates:
 
+11/29/25
+    - Updated Anim Tools - No Loner Laggy
+    - Split apart Float Tool and Reach, both are no seperate button found in the "Other Scripts" Page
+    - Updated and Improved Get tools ]
+                                      ------- Both should be much more reliable now
+    - Updated and Improved Respawn   ]
+
+    Thas all for today fokes, enjoy ;)
+    |
 11/28/2025
     - Removed all Chat Command Logic. Hub now ONLY uses toggle button (i was tired of typing in chat)
     - Theres now 2 use tools buttons. Ones for no anim, ones for anim. No anim provides stablity for ping, preventing it from spiking so often. With anim is stronger, but much higher chance of ping spikeage.
@@ -849,32 +846,6 @@ infoLabel:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
 end)
 infoScroll.CanvasSize = UDim2.new(0, 0, 0, infoLabel.AbsoluteSize.Y + 20)
 
--- Verified page (kept)
-if isVerified(LocalPlayer.UserId) then
-    local secretPage = createPage("Secret Scripts")
-    local toolsHeader = Instance.new("TextLabel")
-    toolsHeader.Size = UDim2.new(1, -24, 0, 26)
-    toolsHeader.BackgroundTransparency = 1
-    toolsHeader.Font = Enum.Font.GothamBold
-    toolsHeader.TextSize = 16
-    toolsHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
-    toolsHeader.TextXAlignment = Enum.TextXAlignment.Left
-    toolsHeader.Text = "Secret Scripts"
-    toolsHeader.Parent = secretPage
-    registerRainbow(addStroke(toolsHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(toolsHeader)
-
-    local secrets = {
-        {"Gnd Hub", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/GND%20HUb"},
-        {"Perma Death", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/PermaDeath"},
-        {"Attacker Tracker", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Attacker%20Tracker"},
-    }
-    for i, t in ipairs(secrets) do
-        local row = createActionButton(t[1], t[2])
-        row.LayoutOrder = 10 + i
-        row.Parent = secretPage
-    end
-end
-
 -- Tools / Player / Other / Settings pages: preserved
 local toolsPage = createPage("Tool Scripts")
 local toolsHeader = Instance.new("TextLabel")
@@ -894,8 +865,6 @@ local tools = {
     {"No Anim Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Use%20Tools%20No%20Anim"},
     {"Anim Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Use%20Tools%20Anim"},
     {"Normla Kill Aura", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Death%20Aura.txt"},
-    {"Reach", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Reach"},
-    {"Float Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Float%20Tools"},
     {"OP Insta-Kill", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Insta-Kill"},
 }
 for i, t in ipairs(tools) do
@@ -943,6 +912,8 @@ oHeader.Parent = otherPage
 registerRainbow(addStroke(oHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(oHeader)
 
 local otherScripts = {
+    {"Float Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Float%20Tools"},
+    {"Reach", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Reach"},
     {"Axe Smash Spam", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Axe%20Smash%20Spam"},
 }
 for i,t in ipairs(otherScripts) do
@@ -1123,13 +1094,10 @@ end)
 local btnWelcome = createSidebarButton("Welcome", 1)
 local btnInfo = createSidebarButton("Info", 2); btnInfo.SetAccent(true)
 local btnUpdates = createSidebarButton("Updates", 3)
-if isVerified(LocalPlayer.UserId) then 
-    local btnSecret = createSidebarButton("Secret Scripts", 4)
-end
-local btnTools = createSidebarButton("Tool Scripts", 5)
-local btnPlayer = createSidebarButton("Player Scripts", 6)
-local btnOther = createSidebarButton("Other Scripts", 7)
-local btnSettings = createSidebarButton("Settings", 8)
+local btnTools = createSidebarButton("Tool Scripts", 4)
+local btnPlayer = createSidebarButton("Player Scripts", 5)
+local btnOther = createSidebarButton("Other Scripts", 6)
+local btnSettings = createSidebarButton("Settings", 7)
 
 -- ======= Dragging (PC + Mobile) =======
 local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
