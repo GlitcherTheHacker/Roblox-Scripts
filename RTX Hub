@@ -127,7 +127,8 @@ if PlayerGui:FindFirstChild("RTXHubGui") then
     PlayerGui.RTXHubGui:Destroy()
 end
 
--- ======= UI: ScreenGui & Mobile Scaling =======
+-- ======= UI: ScreenGui & IMPROVED MOBILE SCALING =======
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "RTXHubGui"
 screenGui.DisplayOrder = 999
@@ -135,21 +136,34 @@ screenGui.IgnoreGuiInset = true
 screenGui.ResetOnSpawn = false
 screenGui.Parent = PlayerGui
 
-local uiScale = Instance.new("UIScale", screenGui)
+local uiScale = Instance.new("UIScale")
+uiScale.Parent = screenGui
+
 local function computeScale()
     local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280,720)
     local minDim = math.min(viewport.X, viewport.Y)
+
     if UserInputService.TouchEnabled then
-        return math.clamp(minDim / 900, 0.55, 0.95)
+        -- 📱 MOBILE FIX:
+        -- MUCH higher base scale + raised minimum clamp so hub is always readable.
+        local base = minDim / 650      -- <- higher gain = bigger UI
+        return math.clamp(base, 0.95, 1.35)
+
     else
-        return math.clamp(minDim / 1200, 0.9, 1.1)
+        -- 🖥 DESKTOP:
+        local base = minDim / 1200
+        return math.clamp(base, 0.9, 1.1)
     end
 end
+
 local function updateScale()
     uiScale.Scale = computeScale()
 end
+
 updateScale()
+
 workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(updateScale)
+
 if workspace.CurrentCamera then
     workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
 end
