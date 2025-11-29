@@ -846,6 +846,29 @@ end)
 infoScroll.CanvasSize = UDim2.new(0, 0, 0, infoLabel.AbsoluteSize.Y + 20)
 
 -- Tools / Player / Other / Settings pages: preserved
+local testPage = createPage("Test Scripts")
+local testHeader = Instance.new("TextLabel")
+testHeader.Size = UDim2.new(1, -24, 0, 26)
+testHeader.BackgroundTransparency = 1
+testHeader.Font = Enum.Font.GothamBold
+testHeader.TextSize = 16
+testHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
+testHeader.TextXAlignment = Enum.TextXAlignment.Left
+testHeader.Text = "Test Scripts"
+testHeader.Parent = testPage
+registerRainbow(addStroke(testHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(testHeader)
+
+local testing = {
+    {"Anti-GodMode", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Anti-GodMode"},
+}
+
+for i, t in ipairs(testing) do
+    local row = createActionButton(t[1], t[2])
+    row.LayoutOrder = 10 + i
+    row.Parent = testPage
+end
+
+-- Tools / Player / Other / Settings pages: preserved
 local toolsPage = createPage("Tool Scripts")
 local toolsHeader = Instance.new("TextLabel")
 toolsHeader.Size = UDim2.new(1, -24, 0, 26)
