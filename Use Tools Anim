@@ -11,7 +11,7 @@ local player     = Players.LocalPlayer
 ----------------------------------------------------------------
 -- CONFIG — SAFE POWER LIMITS
 ----------------------------------------------------------------
-local ACTIVATIONS_PER_SECOND = 18   -- per tool (safe cap)
+local ACTIVATIONS_PER_SECOND = 100   -- per tool (safe cap)
 local EQUIP_REFRESH_RATE     = 0.25 -- ensure re-equip every quarter second
 
 ----------------------------------------------------------------
