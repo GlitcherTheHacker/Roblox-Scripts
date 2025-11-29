@@ -1,11 +1,11 @@
 ----------------------------------------------------------
--- VOID EXECUTER v2.1 — GUI FIXED
+-- VOID EXECUTER v3.0 — Draggable GUI + Tool-Only Void Fling
 ----------------------------------------------------------
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 ----------------------------------------------------------
@@ -13,8 +13,9 @@ local Workspace = game:GetService("Workspace")
 ----------------------------------------------------------
 
 local VOID_Y = -500
-local DOWN_FORCE = -2500
+local DOWN_FORCE = -3500
 local MAX_FORCE = Vector3.new(1e9, 1e9, 1e9)
+local TOOL_OFFSET = CFrame.new(0,0,-1.5)   -- tool stays 1.5 studs behind target
 local TOOL_GRIP_OFFSET = Vector3.new(0,0,0)
 
 local active = false
@@ -26,7 +27,7 @@ local targetParts = {}
 ----------------------------------------------------------
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.Parent = LocalPlayer.PlayerGui
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 
@@ -36,7 +37,6 @@ Frame.Position = UDim2.new(0.5, -130, 0.3, 0)
 Frame.BackgroundColor3 = Color3.fromRGB(20,20,25)
 Frame.ZIndex = 10
 Frame.Parent = ScreenGui
-
 Instance.new("UICorner", Frame).CornerRadius = UDim.new(0,12)
 
 local Title = Instance.new("TextLabel", Frame)
@@ -45,17 +45,15 @@ Title.Size = UDim2.new(1,0,0,35)
 Title.BackgroundTransparency = 1
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 20
-Title.TextColor3 = Color3.fromRGB(255,255,255)
+Title.TextColor3 = Color3.new(1,1,1)
 Title.ZIndex = 11
 
 local Dropdown = Instance.new("TextButton", Frame)
 Dropdown.Size = UDim2.new(1, -20, 0, 35)
 Dropdown.Position = UDim2.new(0,10,0,45)
 Dropdown.BackgroundColor3 = Color3.fromRGB(35,35,45)
-Dropdown.TextColor3 = Color3.fromRGB(255,255,255)
+Dropdown.TextColor3 = Color3.new(1,1,1)
 Dropdown.Text = "Select Player"
-Dropdown.Font = Enum.Font.GothamBold
-Dropdown.TextSize = 14
 Dropdown.ZIndex = 11
 
 local ToggleButton = Instance.new("TextButton", Frame)
@@ -69,7 +67,40 @@ ToggleButton.TextSize = 16
 ToggleButton.ZIndex = 11
 
 ----------------------------------------------------------
--- DROPDOWN MENU (FULLY FIXED)
+-- MAKE GUI DRAGGABLE (MODERN DRAG)
+----------------------------------------------------------
+
+local dragging = false
+local dragStart, startPos
+
+Frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = Frame.Position
+    end
+end)
+
+Frame.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        Frame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+----------------------------------------------------------
+-- DROPDOWN MENU (SAME AS v2.1)
 ----------------------------------------------------------
 
 local menuOpen = false
@@ -84,7 +115,7 @@ local function closeMenu()
 end
 
 local function openMenu()
-    closeMenu() -- ensure no duplicates
+    closeMenu()
     menuOpen = true
 
     local menu = Instance.new("Frame")
@@ -92,7 +123,6 @@ local function openMenu()
     menu.Size = UDim2.new(0, 240, 0, 150)
     menu.Position = UDim2.new(0.5, -120, 0.45, 0)
     menu.BackgroundColor3 = Color3.fromRGB(30,30,40)
-    menu.BorderSizePixel = 2
     menu.ZIndex = 50
     menu.Parent = ScreenGui
 
@@ -104,11 +134,11 @@ local function openMenu()
             local b = Instance.new("TextButton")
             b.Size = UDim2.new(1, -10, 0, 25)
             b.BackgroundColor3 = Color3.fromRGB(45,45,55)
-            b.TextColor3 = Color3.fromRGB(255,255,255)
+            b.TextColor3 = Color3.new(1,1,1)
             b.Text = plr.Name
             b.ZIndex = 51
             b.Parent = menu
-            
+
             b.MouseButton1Click:Connect(function()
                 target = plr
                 Dropdown.Text = "Target: " .. plr.Name
@@ -119,11 +149,7 @@ local function openMenu()
 end
 
 Dropdown.MouseButton1Click:Connect(function()
-    if menuOpen then
-        closeMenu()
-    else
-        openMenu()
-    end
+    if menuOpen then closeMenu() else openMenu() end
 end)
 
 ----------------------------------------------------------
@@ -137,29 +163,29 @@ ToggleButton.MouseButton1Click:Connect(function()
 end)
 
 ----------------------------------------------------------
--- REMAINING VOID LOGIC (UNCHANGED)
+-- TOOL ONLY VOID-FLING ENGINE
 ----------------------------------------------------------
 
-local function adjustToolGrip(tool)
-    if tool:IsA("Tool") then
+local function adjustGrip(tool)
+    pcall(function()
         tool.GripPos = TOOL_GRIP_OFFSET
-    end
+    end)
 end
 
 local function prepareTools()
     local char = LocalPlayer.Character
     if not char then return end
-    for _, tool in pairs(char:GetChildren()) do
+    for _, tool in ipairs(char:GetChildren()) do
         if tool:IsA("Tool") and tool:FindFirstChild("Handle") then
-            adjustToolGrip(tool)
+            adjustGrip(tool)
         end
     end
 end
 
-local function getTargetParts()
+local function collectTargetParts()
     targetParts = {}
     if not target or not target.Character then return end
-    for _, part in pairs(target.Character:GetDescendants()) do
+    for _, part in ipairs(target.Character:GetDescendants()) do
         if part:IsA("BasePart") then
             table.insert(targetParts, part)
         end
@@ -169,8 +195,8 @@ end
 local function applyVoidForce()
     for _, part in ipairs(targetParts) do
         if part and part.Parent then
-            local bv = part:FindFirstChild("VOID_PUSH") or Instance.new("BodyVelocity")
-            bv.Name = "VOID_PUSH"
+            local bv = part:FindFirstChild("VOID_FORCE") or Instance.new("BodyVelocity")
+            bv.Name = "VOID_FORCE"
             bv.MaxForce = MAX_FORCE
             bv.Velocity = Vector3.new(0, DOWN_FORCE, 0)
             bv.Parent = part
@@ -178,7 +204,7 @@ local function applyVoidForce()
     end
 end
 
-local function attachToolsToTarget()
+local function tetherTools()
     if not target or not target.Character then return end
     local hrp = target.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
@@ -188,7 +214,16 @@ local function attachToolsToTarget()
 
     for _, tool in ipairs(myChar:GetChildren()) do
         if tool:IsA("Tool") and tool:FindFirstChild("Handle") then
-            tool.Handle.CFrame = hrp.CFrame * CFrame.new(0,0,-1)
+            
+            tool.Handle.CFrame = hrp.CFrame * TOOL_OFFSET
+            
+            -- optional anti-break tether  
+            local bp = tool.Handle:FindFirstChild("Tether") or Instance.new("BodyPosition")
+            bp.Name = "Tether"
+            bp.MaxForce = MAX_FORCE
+            bp.Position = hrp.Position - Vector3.new(0, 0, 1.5)
+            bp.Parent = tool.Handle
+
             tool:Activate()
         end
     end
@@ -197,9 +232,9 @@ end
 RunService.Heartbeat:Connect(function()
     if not active or not target then return end
     prepareTools()
-    getTargetParts()
-    attachToolsToTarget()
+    collectTargetParts()
+    tetherTools()
     applyVoidForce()
 end)
 
-print("VOID EXECUTER v2.1 — GUI Fixed, Menu Fully Functional")
+print("VOID EXECUTER v3.0 — Draggable, Tool-Only Void Fling Activated")
