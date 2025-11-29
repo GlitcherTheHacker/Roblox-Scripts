@@ -1,47 +1,45 @@
--- ⚡ ULTRA TOOL GRABBER ⚡
+-- ⚡ ULTIMATE TOOL GRABBER ⚡
 
--- Services
-local Players = game:GetService("Players")
+print("⚡Ultimate Tool Grabber Initilizing⚡")
+----------------------------------------------------------------
+-- SERVICES
+----------------------------------------------------------------
+local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
-
 local LocalPlayer = Players.LocalPlayer
-local Tycoons = workspace:WaitForChild("Tycoons")
+local Tycoons     = workspace:WaitForChild("Tycoons")
 
----------------------------------------------------------
--- CONFIGURATION (SAFE MAXIMUMS)
----------------------------------------------------------
-local BURSTS_PER_FRAME   = 5   -- pushes pickup hard without flooding net
-local TOUCHES_PER_BURST = 5   -- firetouch calls inside one burst
+----------------------------------------------------------------
+-- CONFIG (TUNED FOR REAL NETWORK LIMITS)
+----------------------------------------------------------------
+local TOUCH_BURST_COUNT = 6        -- touches per pad per burst
+local BURST_INTERVAL   = 0.028    -- ~36 bursts/sec (sweet spot for ping stability)
+local MAX_INITIAL_TIME = 2.5      -- how long to full-burst after spawn
 
-local ACTIVE_SECONDS    = 1.8 -- heavy spam window after respawn
-local FRAME_COOLDOWN    = 0   -- no added delay; locked to Heartbeat
-
----------------------------------------------------------
--- INTERNAL STATE
----------------------------------------------------------
-local root
-local pads = {}
-local grabbing = false
-local activeUntil = 0
-
----------------------------------------------------------
--- PAD FILTERING
----------------------------------------------------------
+----------------------------------------------------------------
+-- BASE FILTER
+----------------------------------------------------------------
 local allowedBases  = { "Stone", "Magic", "Storm" }
-local excludedBases = { "Insanity", "Giant", "Dark", "Spike", "Web", "Strong" }
+local excludedBases = { "Insanity","Giant","Dark","Spike","Web","Strong" }
 
-local allowSet = {}
-local blockSet = {}
+local allowedSet, excludedSet = {}, {}
+for _, b in ipairs(allowedBases)  do allowedSet[b]  = true end
+for _, b in ipairs(excludedBases) do excludedSet[b] = true end
 
-for _, b in ipairs(allowedBases) do allowSet[b] = true end
-for _, b in ipairs(excludedBases) do blockSet[b] = true end
+----------------------------------------------------------------
+-- INTERNAL STATE
+----------------------------------------------------------------
+local pads = {}
+local root
+local running = false
 
----------------------------------------------------------
--- UTILITY FUNCTIONS
----------------------------------------------------------
+----------------------------------------------------------------
+-- UTILITIES
+----------------------------------------------------------------
+
 local function getRoot()
-	local char = LocalPlayer.Character
-	return char and char:FindFirstChild("HumanoidRootPart")
+	local c = LocalPlayer.Character
+	return c and c:FindFirstChild("HumanoidRootPart")
 end
 
 local function hasTools()
@@ -49,103 +47,129 @@ local function hasTools()
 	return bp and #bp:GetChildren() > 0
 end
 
----------------------------------------------------------
--- PAD REGISTRATION
----------------------------------------------------------
-local function bindPad(pad)
+----------------------------------------------------------------
+-- PAD COLLECTION
+----------------------------------------------------------------
+
+local function registerPad(pad)
 	local base = pad.Parent and pad.Parent.Parent
 	if not base then return end
 
-	if blockSet[base.Name] then return end
+	local name = base.Name
+	if excludedSet[name] then return end
 
-	if allowSet[base.Name] or next(allowSet) == nil then
+	if allowedSet[name] or not excludedSet[name] then
 		pads[pad] = true
 	end
 end
 
--- Initial scan
+-- initial scan
 for _, d in ipairs(Tycoons:GetDescendants()) do
 	if d:IsA("TouchTransmitter")
-	and d.Parent
-	and d.Parent.Parent
-	and d.Parent.Parent.Name:find("GearGiver1") then
-
-		bindPad(d.Parent)
+		and d.Parent
+		and d.Parent.Parent
+		and d.Parent.Parent.Name:find("GearGiver1")
+	then
+		registerPad(d.Parent)
 	end
 end
 
--- Dynamic scan
+-- live updates
 Tycoons.DescendantAdded:Connect(function(d)
 	if d:IsA("TouchTransmitter")
-	and d.Parent
-	and d.Parent.Parent
-	and d.Parent.Parent.Name:find("GearGiver1") then
-
-		bindPad(d.Parent)
+		and d.Parent
+		and d.Parent.Parent
+		and d.Parent.Parent.Name:find("GearGiver1")
+	then
+		registerPad(d.Parent)
 	end
 end)
 
----------------------------------------------------------
--- TOUCH BURST FUNCTION
----------------------------------------------------------
-local function hitPad(pad)
-	for i = 1, TOUCHES_PER_BURST do
+----------------------------------------------------------------
+-- CORE TOUCH LOGIC
+----------------------------------------------------------------
+
+local function touchPad(pad)
+	for i = 1, TOUCH_BURST_COUNT do
 		firetouchinterest(root, pad, 0)
 		firetouchinterest(root, pad, 1)
 	end
 end
 
----------------------------------------------------------
--- CORE BURST LOOP
----------------------------------------------------------
-RunService.Heartbeat:Connect(function()
+----------------------------------------------------------------
+-- BURST FUNCTION
+----------------------------------------------------------------
 
-	if not grabbing then return end
-	if os.clock() >= activeUntil then
-		grabbing = false
-		return
-	end
-
-	root = root or getRoot()
+local function burstAll()
 	if not root then return end
 
-	-- Stop instantly when successful
-	if hasTools() then
-		grabbing = false
-		return
+	for pad in pairs(pads) do
+		touchPad(pad)
+	end
+end
+
+----------------------------------------------------------------
+-- RESPAWN OVERDRIVE
+----------------------------------------------------------------
+
+local function onRespawn()
+
+	-- acquire HRP instantly
+	task.spawn(function()
+		local char = LocalPlayer.Character
+		if not char then return end
+		char:WaitForChild("HumanoidRootPart", 5)
+		root = char:FindFirstChild("HumanoidRootPart")
+	end)
+
+	local t0 = os.clock()
+
+	-- aggressive burst phase
+	while os.clock() - t0 < MAX_INITIAL_TIME do
+		if hasTools() then break end
+		burstAll()
+		task.wait(BURST_INTERVAL)
 	end
 
-	for pad in pairs(pads) do
-		for _ = 1, BURSTS_PER_FRAME do
-			hitPad(pad)
+end
+
+LocalPlayer.CharacterAdded:Connect(onRespawn)
+
+----------------------------------------------------------------
+-- ALWAYS-ON LOW-OVERHEAD LOOP
+----------------------------------------------------------------
+
+task.spawn(function()
+	running = true
+
+	while running do
+
+		root = root or getRoot()
+
+		if root and not hasTools() then
+			burstAll()
 		end
+
+		task.wait(BURST_INTERVAL)
 	end
 
 end)
 
----------------------------------------------------------
--- RESPAWN BOOST MODE
----------------------------------------------------------
-local function onRespawn()
+----------------------------------------------------------------
+-- IMMEDIATE EXECUTION BURST
+----------------------------------------------------------------
 
-	root = nil
-	grabbing = true
-	activeUntil = os.clock() + ACTIVE_SECONDS
+task.spawn(function()
 
-	task.spawn(function()
-		local char = LocalPlayer.Character
-		if char then
-			char:WaitForChild("HumanoidRootPart", 3)
-			root = getRoot()
-		end
-	end)
+	task.wait(0.15) -- small delay to allow HRP init
+	root = getRoot()
 
-end
+	for _ = 1, 8 do
+		burstAll()
+		task.wait(0.02)
+	end
 
----------------------------------------------------------
--- EVENTS
----------------------------------------------------------
-LocalPlayer.CharacterAdded:Connect(onRespawn)
+end)
 
----------------------------------------------------------
-print("⚡ ULTRA TOOL GRABBER — PEAK SAFE PERFORMANCE MODE READY")
+----------------------------------------------------------------
+print("⚡ ULTIMATE TOOL GRABBER INITILIZED ⚡")
