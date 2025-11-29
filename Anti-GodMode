@@ -1,0 +1,201 @@
+----------------------------------------------------------
+-- VOID EXECUTER v2.0
+-- Anti-godmode, Anti-floating-tools, Remote Void Flinger
+----------------------------------------------------------
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+----------------------------------------------------------
+-- CONFIG
+----------------------------------------------------------
+
+local VOID_Y = -500
+local DOWN_FORCE = -2500               -- force applied downward
+local MAX_FORCE = Vector3.new(1e9, 1e9, 1e9)
+local TOOL_GRIP_OFFSET = Vector3.new(0,0,0)
+local AUTO_REAPPLY_INTERVAL = 0.1
+
+local active = false
+local target = nil
+local targetParts = {}
+
+----------------------------------------------------------
+-- GUI: Player Dropdown
+----------------------------------------------------------
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.ResetOnSpawn = false
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 260, 0, 200)
+Frame.Position = UDim2.new(0.5, -130, 0.3, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(20,20,25)
+Frame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner", Frame)
+UICorner.CornerRadius = UDim.new(0,12)
+
+local Title = Instance.new("TextLabel", Frame)
+Title.Text = "VOID EXECUTER"
+Title.Size = UDim2.new(1,0,0,35)
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 20
+Title.TextColor3 = Color3.fromRGB(255,255,255)
+
+local Dropdown = Instance.new("TextButton", Frame)
+Dropdown.Size = UDim2.new(1, -20, 0, 35)
+Dropdown.Position = UDim2.new(0,10,0,45)
+Dropdown.BackgroundColor3 = Color3.fromRGB(35,35,45)
+Dropdown.TextColor3 = Color3.fromRGB(255,255,255)
+Dropdown.Text = "Select Player"
+Dropdown.Font = Enum.Font.GothamBold
+Dropdown.TextSize = 14
+
+local ToggleButton = Instance.new("TextButton", Frame)
+ToggleButton.Size = UDim2.new(1, -20, 0, 35)
+ToggleButton.Position = UDim2.new(0,10,0,90)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(30,30,35)
+ToggleButton.TextColor3 = Color3.fromRGB(255,100,100)
+ToggleButton.Text = "OFF"
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.TextSize = 16
+
+----------------------------------------------------------
+-- Target Selection
+----------------------------------------------------------
+
+local function listPlayers()
+    local menu = Instance.new("Frame")
+    menu.Size = UDim2.new(1, -20, 0, 120)
+    menu.Position = UDim2.new(0, 10, 0, 80)
+    menu.BackgroundColor3 = Color3.fromRGB(30,30,40)
+    menu.Parent = Frame
+    menu.ZIndex = 10
+
+    local layout = Instance.new("UIListLayout", menu)
+    layout.Padding = UDim.new(0,2)
+
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local b = Instance.new("TextButton", menu)
+            b.Size = UDim2.new(1,0,0,25)
+            b.BackgroundColor3 = Color3.fromRGB(45,45,55)
+            b.TextColor3 = Color3.fromRGB(255,255,255)
+            b.Text = plr.Name
+            b.MouseButton1Click:Connect(function()
+                target = plr
+                Dropdown.Text = "Target: " .. plr.Name
+                menu:Destroy()
+            end)
+        end
+    end
+end
+
+Dropdown.MouseButton1Click:Connect(listPlayers)
+
+----------------------------------------------------------
+-- Tool Grip Teleport System
+----------------------------------------------------------
+
+local function adjustToolGrip(tool)
+    if tool:IsA("Tool") then
+        tool.GripPos = TOOL_GRIP_OFFSET
+    end
+end
+
+local function prepareTools()
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    for _, tool in pairs(char:GetChildren()) do
+        if tool:IsA("Tool") and tool:FindFirstChild("Handle") then
+            adjustToolGrip(tool)
+        end
+    end
+end
+
+----------------------------------------------------------
+-- Collect Parts of Target
+----------------------------------------------------------
+
+local function getTargetParts()
+    targetParts = {}
+    if not target or not target.Character then return end
+
+    for _, part in pairs(target.Character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            table.insert(targetParts, part)
+        end
+    end
+end
+
+----------------------------------------------------------
+-- Apply Downward Void Force
+----------------------------------------------------------
+
+local function applyVoidForce()
+    for _, part in ipairs(targetParts) do
+        if part and part.Parent then
+            local bv = part:FindFirstChild("VOID_PUSH") or Instance.new("BodyVelocity")
+            bv.Name = "VOID_PUSH"
+            bv.MaxForce = MAX_FORCE
+            bv.Velocity = Vector3.new(0, DOWN_FORCE, 0)
+            bv.Parent = part
+        end
+    end
+end
+
+----------------------------------------------------------
+-- Teleport Your Tools to Target
+----------------------------------------------------------
+
+local function attachToolsToTarget()
+    if not target or not target.Character then return end
+    local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+
+    for _, tool in ipairs(myChar:GetChildren()) do
+        if tool:IsA("Tool") and tool:FindFirstChild("Handle") then
+            -- teleport handle to target
+            tool.Handle.CFrame = hrp.CFrame * CFrame.new(0, 0, -1)
+            tool:Activate()
+        end
+    end
+end
+
+----------------------------------------------------------
+-- Automated Loop
+----------------------------------------------------------
+
+RunService.Heartbeat:Connect(function()
+    if not active or not target then return end
+
+    prepareTools()
+
+    getTargetParts()
+
+    attachToolsToTarget()
+
+    applyVoidForce()
+end)
+
+----------------------------------------------------------
+-- Toggle
+----------------------------------------------------------
+
+ToggleButton.MouseButton1Click:Connect(function()
+    active = not active
+    ToggleButton.Text = active and "ON" or "OFF"
+    ToggleButton.TextColor3 = active and Color3.fromRGB(100,255,100) or Color3.fromRGB(255,100,100)
+end)
+
+print("VOID EXECUTER Ready.")
