@@ -8,8 +8,8 @@ local Tycoons       = workspace:WaitForChild("Tycoons")
 
 -- === CONFIG (MAX POWER) ===
 local SUBFRAME_BURSTS      = 9       -- how many bursts inside a single frame
-local TOUCH_SPAM_COUNT     = 6       -- firetouchinterest spam per burst
-local RESPAWN_SPAM_TIME    = 2.5     -- time window after spawn to spam as hard as possible
+local TOUCH_SPAM_COUNT     = 9       -- firetouchinterest spam per burst
+local RESPAWN_SPAM_TIME    = 0     -- time window after spawn to spam as hard as possible
 local GLOBAL_SPAM_INTERVAL = 0       -- 0 delay = as fast as executor allows
 local GRAB_STOP_DELAY      = 0.05    -- short pause before checking tool completion
 
