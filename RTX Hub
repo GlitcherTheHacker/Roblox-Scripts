@@ -127,8 +127,7 @@ if PlayerGui:FindFirstChild("RTXHubGui") then
     PlayerGui.RTXHubGui:Destroy()
 end
 
--- ======= UI: ScreenGui & IMPROVED MOBILE SCALING =======
-
+-- ======= UI: ScreenGui & BALANCED MOBILE SCALING =======
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "RTXHubGui"
 screenGui.DisplayOrder = 999
@@ -144,13 +143,14 @@ local function computeScale()
     local minDim = math.min(viewport.X, viewport.Y)
 
     if UserInputService.TouchEnabled then
-        -- 📱 MOBILE FIX:
-        -- MUCH higher base scale + raised minimum clamp so hub is always readable.
-        local base = minDim / 650      -- <- higher gain = bigger UI
-        return math.clamp(base, 0.95, 1.35)
+        -- 📱 Mobile — tuned so the hub is BIG but NOT fullscreen
+        local base = minDim / 720
+
+        -- This range gives breathing room while still being readable
+        return math.clamp(base, 0.85, 1.15)
 
     else
-        -- 🖥 DESKTOP:
+        -- 🖥 Desktop unchanged
         local base = minDim / 1200
         return math.clamp(base, 0.9, 1.1)
     end
@@ -169,7 +169,6 @@ if workspace.CurrentCamera then
 end
 
 -- ======= Rainbow Flow System (register strokes/text to animate) =======
--- registry entries: {type="stroke"|"text", inst = Instance}
 local rainbowRegistry = {}
 local rainbowSpeed = 0.16  -- hue cycles per second
 local rainbowSaturation = 0.92
