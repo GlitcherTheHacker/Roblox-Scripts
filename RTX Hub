@@ -749,7 +749,15 @@ updatesLabel.Position = UDim2.new(0, 5, 0, 0)
 updatesLabel.BackgroundTransparency = 1
 updatesLabel.Text = [[
 📝 Updates:
+    |
+11/30/25
+    - Reworked respawn, it should NOT cause lag anymore, but still be super reliable and fast, hofully still th efastest.
+    - New test Page, now verification protected, for reasons.
+    - New Test Script, Anti-GodMode, coming soon for everyone.. maybe..
+    - Renamed Reach to Grip, for reasons i dont feel like explaining, its still sueful tho trust me :)
 
+                        Thats all, enjoy ;)
+    |
 11/29/25
     - Updated Anim Tools - No Loner Laggy
     - Split apart Float Tool and Reach, both are no seperate button found in the "Other Scripts" Page
@@ -757,18 +765,6 @@ updatesLabel.Text = [[
     - Removed Secret Scripts Page, it was kinda useless. I'll add the scripts on this page to "Other Scripts"
 
     Thas all for today fokes, enjoy ;)
-    |
-11/28/2025
-    - Removed all Chat Command Logic. Hub now ONLY uses toggle button (i was tired of typing in chat)
-    - Theres now 2 use tools buttons. Ones for no anim, ones for anim. No anim provides stablity for ping, preventing it from spiking so often. With anim is stronger, but much higher chance of ping spikeage.
-    - Fixed no cooldown causing so much lag and ping spikeage.
-    - Updated Insta-Kill so it can be usable now.
-    |
-11/8/2025:
-    - New remodeled hub UI (animated, chat-driven open/close)
-    - Full rainbow flowing borders & rainbow button text
-    - Mobile autoscaling & improved layout
-    - Info page & toasts for commands
 ]]
 updatesLabel.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 updatesLabel.TextWrapped = true
@@ -950,7 +946,7 @@ registerRainbow(addStroke(oHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(oH
 local otherScripts = {
     {"PermaDeath", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/PermaDeath"},
     {"Float Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Float%20Tools"},
-    {"Reach", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Reach"},
+    {"Grip", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/GripTools"},
     {"Attacker Tarcker", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Attacker%20Tracker"},
     {"Axe Smash Spam", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Axe%20Smash%20Spam"},
 }
