@@ -948,6 +948,7 @@ oHeader.Parent = otherPage
 registerRainbow(addStroke(oHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(oHeader)
 
 local otherScripts = {
+    {"PermaDeath", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/PermaDeath"},
     {"Float Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Float%20Tools"},
     {"Reach", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Reach"},
     {"Attacker Tarcker", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Attacker%20Tracker"},
