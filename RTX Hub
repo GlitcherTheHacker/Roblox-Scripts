@@ -869,7 +869,7 @@ testHeader.Parent = testPage
 registerRainbow(addStroke(testHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(testHeader)
 
 local testing = {
-    {"Anti-GodMode", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Anti-GodMode"},
+    {"Anti-GodMode", "https://pastefy.app/pyLRQ8bM/raw"},
 }
 
 for i, t in ipairs(testing) do
