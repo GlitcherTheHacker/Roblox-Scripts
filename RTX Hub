@@ -17,7 +17,6 @@ local whitelist = {
     [2522193455] = true, -- (Alt)
     [5146822757] = true, -- (Alt)
     [5054998059] = true, -- (Alt)
-  	[3429553477] = true, -- (Alt)
     [7820186858] = true, -- (Alt)
     [9407037318] = true, -- Messi
     [1989950303] = true, -- Lucky
@@ -33,7 +32,10 @@ end
 -- ======= Page Whitelist =======
 local VERIFIED_USERS = {
     2522193455, -- Hub Creator
-    4449347130, -- Alt
+    2522193455, -- (Alt)
+    5146822757, -- (Alt)
+    5054998059, -- (Alt)
+    7820186858, -- (Alt)
     9407037318, -- Messi
     1989950303, -- Lucky
 }
