@@ -30,6 +30,18 @@ if not whitelist[player.UserId] then
     return
 end
 
+-- ======= Page Whitelist =======
+local VERIFIED_USERS = {
+    2522193455, -- Hub Creator
+    4449347130, -- Alt
+    9407037318, -- Messi
+    1989950303, -- Lucky
+}
+local function isVerified(userId)
+    for _, id in ipairs(VERIFIED_USERS) do if id == userId then return true end end
+    return false
+end
+
 -- ======= Config / Defaults (preserved) =======
 local DEFAULT_THEME = {
     Accent = Color3.fromRGB(98, 53, 255),
@@ -1117,7 +1129,9 @@ end)
 local btnWelcome = createSidebarButton("Welcome", 1)
 local btnInfo = createSidebarButton("Info", 2); btnInfo.SetAccent(true)
 local btnUpdates = createSidebarButton("Updates", 3)
-local btnTest = createSidebarButton("Test Scripts", 4)
+if isVerified(LocalPlayer.UserId) then 
+    local btnTest = createSidebarButton("Test Scripts", 4)
+end
 local btnTools = createSidebarButton("Tool Scripts", 5)
 local btnPlayer = createSidebarButton("Player Scripts", 6)
 local btnOther = createSidebarButton("Other Scripts", 7)
