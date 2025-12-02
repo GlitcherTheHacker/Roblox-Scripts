@@ -1273,7 +1273,7 @@ if screenGui and main and toggleHub then
 
     UserInputService.InputBegan:Connect(function(key, gp)
         if gp then return end
-        if key.KeyCode == Enum.KeyCode.H then
+        if key.KeyCode == Enum.KeyCode.O then
             toggleHub()
         end
     end)
