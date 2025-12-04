@@ -36,7 +36,6 @@ local VERIFIED_USERS = {
     5146822757, -- (Alt)
     5054998059, -- (Alt)
     7820186858, -- (Alt)
-    9407037318, -- Messi
     1989950303, -- Lucky
 }
 local function isVerified(userId)
@@ -869,6 +868,12 @@ testHeader.Parent = testPage
 registerRainbow(addStroke(testHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(testHeader)
 
 local testing = {
+    {"OP NoCooldown V2", "https://pastefy.app/TKPBRXLV/raw"},
+    {"OP Respawn V2", "https://pastefy.app/AEXGWk46/raw"},
+    {"Kill Aura V3", "https://pastefy.app/cHB18FKG/raw"},
+    {"OP Get Tools V2", "https://pastefy.app/ETV5pszW/raw"},
+    {"Damage V2", "https://pastefy.app/a8JSv1B6/raw"},
+    {"Float Tools V2", "https://pastefy.app/ceAeq4Ka/raw"},
     {"Anti-GodMode", "https://pastefy.app/pyLRQ8bM/raw"},
 }
 
@@ -1273,7 +1278,7 @@ if screenGui and main and toggleHub then
 
     UserInputService.InputBegan:Connect(function(key, gp)
         if gp then return end
-        if key.KeyCode == Enum.KeyCode.O then
+        if key.KeyCode == Enum.KeyCode.G then
             toggleHub()
         end
     end)
