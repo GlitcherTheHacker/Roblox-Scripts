@@ -1,109 +1,88 @@
--- ⚡ SMART ANTI-LAG ⚡
--- Aggressively reduces lag without hammering the CPU
+-- ⚡ ULTIMATE ANTI-LAG V2 ⚡
 
-local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
 
--- === CLEANUP SETTINGS ===
+-- Fast lookup table for destruction types
 local destroyTypes = {
-    "ParticleEmitter", "Trail", "Beam", "Fire", "Smoke", "Sparkles",
-    "Explosion", "ForceField", "Highlight", "ShirtGraphic",
-    "Decal", "Texture", "SurfaceAppearance", "Shirt", "Pants"
+    ParticleEmitter = true,
+    Trail = true,
+    Beam = true,
+    Fire = true,
+    Smoke = true,
+    Sparkles = true,
+    Explosion = true,
+    ForceField = true,
+    Highlight = true,
+    ShirtGraphic = true,
+    Decal = true,
+    Texture = true,
+    SurfaceAppearance = true,
+    Shirt = true,
+    Pants = true,
 }
 
--- Keep track of already cleaned objects to avoid re-checking them
 local cleaned = {}
 
 local function cleanObject(obj)
     if cleaned[obj] then return end
 
-    -- Kill unwanted classes
-    for _, className in ipairs(destroyTypes) do
-        if obj:IsA(className) then
-            obj:Destroy()
-            return -- destroyed, no need to continue
-        end
+    local class = obj.ClassName
+
+    -- Instantly delete unwanted junk
+    if destroyTypes[class] then
+        obj:Destroy()
+        return
     end
 
-    -- Parts optimization
+    -- Optimize physical parts
     if obj:IsA("BasePart") then
         obj.Material = Enum.Material.SmoothPlastic
         obj.Reflectance = 0
-        if obj.Transparency < 0.05 then
-            obj.CastShadow = false
-        end
-        if not obj.Anchored and not obj.CanCollide then
-            obj.CanCollide = false
+        obj.CastShadow = false
+        if obj.CanCollide == false then
+            obj.CanQuery = false
+            obj.CanTouch = false
         end
     end
 
-    -- Stop sounds
+    -- Silence ALL new sounds
     if obj:IsA("Sound") then
-        obj:Stop()
         obj.Volume = 0
+        obj:Stop()
     end
 
     cleaned[obj] = true
 end
 
--- Batch-cleaning function (avoids freezing)
-local function batchClean(objects)
-    local batchSize = 100 -- number of objects per frame
-    local index = 1
-    local total = #objects
-
-    local conn
-    conn = RunService.Heartbeat:Connect(function()
-        for i = 1, batchSize do
-            if index > total then
-                conn:Disconnect()
-                return
-            end
-            cleanObject(objects[index])
-            index += 1
-        end
-    end)
+-- Clean current objects
+for _, descendant in ipairs(workspace:GetDescendants()) do
+    cleanObject(descendant)
 end
 
--- Collect all objects in workspace + lighting
-local function collectAllObjects(root)
-    local all = {}
-    local function recurse(obj)
-        table.insert(all, obj)
-        for _, child in ipairs(obj:GetChildren()) do
-            recurse(child)
-        end
-    end
-    recurse(root)
-    return all
+for _, descendant in ipairs(Lighting:GetDescendants()) do
+    cleanObject(descendant)
 end
 
--- Initial cleanup
-batchClean(collectAllObjects(workspace))
-batchClean(collectAllObjects(Lighting))
+-- EVENT-BASED CLEANING FOR MAX PERFORMANCE
+workspace.DescendantAdded:Connect(cleanObject)
+Lighting.DescendantAdded:Connect(cleanObject)
 
--- === LIGHTING OPTIMIZATION ===
+-- LIGHTING OPTIMIZATION
 Lighting.GlobalShadows = false
-Lighting.FogEnd = 9e9
-Lighting.Brightness = 1
-pcall(function() Lighting.Technology = Enum.Technology.Compatibility end)
-
--- === TERRAIN OPTIMIZATION ===
+Lighting.FogEnd = 1e9
 pcall(function()
-    workspace.Terrain.WaterReflectance = 0
-    workspace.Terrain.WaterTransparency = 1
-    workspace.Terrain.WaterWaveSize = 0
-    workspace.Terrain.WaterWaveSpeed = 0
-    workspace.Terrain.Decoration = false
+    Lighting.Technology = Enum.Technology.Compatibility
 end)
 
--- === OPTIONAL: Periodic light cleaning loop (safe, low frequency) ===
-RunService.Heartbeat:Connect(function()
-    for _, obj in ipairs(workspace:GetChildren()) do
-        cleanObject(obj)
-    end
+-- TERRAIN OPTIMIZATION
+pcall(function()
+    local t = workspace.Terrain
+    t.WaterReflectance = 0
+    t.WaterTransparency = 1
+    t.WaterWaveSize = 0
+    t.WaterWaveSpeed = 0
+    t.Decoration = false
 end)
 
-print("⚡ SMART ANTI-LAG ENABLED ⚡")
+print("⚡ ULTIMATE ANTI-LAG V2 ENABLED ⚡")
