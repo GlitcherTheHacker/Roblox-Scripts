@@ -1,4 +1,4 @@
--- ⚡ NO COOLDOWN — LIMIT BREAK STABILIZED MODE ⚡
+-- ⚡ NO COOLDOWN — STABILIZED MODE ⚡
 
 local RunService = game:GetService("RunService")
 
@@ -81,4 +81,4 @@ task.spawn(function()
 	end
 end)
 
-print("✅ NO COOLDOWN — LIMIT BREAK STABILIZED MODE initialized at near-maximum safe throughput.")
+print("✅ NO COOLDOWN — STABILIZED MODE INITILIZED.")
