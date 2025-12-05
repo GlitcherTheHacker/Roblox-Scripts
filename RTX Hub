@@ -169,82 +169,6 @@ if workspace.CurrentCamera then
     workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
 end
 
--- ======= Rainbow Flow System (register strokes/text to animate) =======
-local rainbowRegistry = {}
-local rainbowSpeed = 0.16  -- hue cycles per second
-local rainbowSaturation = 0.92
-local rainbowValue = 0.95
-
-local function registerRainbow(obj)
-    if not obj then return end
-    if typeof(obj) == "Instance" then
-        local class = obj.ClassName
-        if class == "UIStroke" then
-            table.insert(rainbowRegistry, {type="stroke", inst = obj})
-            return
-        elseif class == "TextLabel" or class == "TextButton" or class == "TextBox" then
-            table.insert(rainbowRegistry, {type="text", inst = obj})
-            return
-        elseif class == "Frame" or class == "ImageLabel" then
-            -- also support registering the frame's UIStroke child if present
-            for _, child in ipairs(obj:GetChildren()) do
-                if child.ClassName == "UIStroke" then
-                    registerRainbow(child); break
-                end
-            end
-            return
-        end
-    end
-end
-
-local function hsv(h,s,v) return Color3.fromHSV((h % 1), math.clamp(s,0,1), math.clamp(v,0,1)) end
-
-spawn(function()
-    while screenGui.Parent do
-        local base = (tick() * rainbowSpeed) % 1
-        local count = #rainbowRegistry
-        if count > 0 then
-            for i, entry in ipairs(rainbowRegistry) do
-                local inst = entry.inst
-                if inst and inst.Parent then
-                    local offset = (i-1)/math.max(1,count) * 0.25
-                    local col = hsv(base + offset, rainbowSaturation, rainbowValue)
-                    if entry.type == "stroke" then
-                        inst.Color = col
-                    elseif entry.type == "text" then
-                        -- set both stroke (if exists) and text color for strong rainbow effect
-                        pcall(function() inst.TextColor3 = col end)
-                        local parent = inst
-                        -- try to find an attached UIStroke to keep in sync
-                        local foundStroke = parent:FindFirstChildWhichIsA("UIStroke") or parent:FindFirstChildWhichIsA("UIStroke")
-                        if foundStroke then foundStroke.Color = col end
-                    end
-                end
-            end
-        end
-        task.wait(0.04)
-    end
-end)
-
--- ======= utility: create a text element with rainbow-stroked text =======
-local function addRainbowText(parent, props)
-    -- props: {Class="TextLabel"/"TextButton", Size, Pos, Text, Font, TextSize, TextXAlignment}
-    local class = props.Class or "TextLabel"
-    local inst = Instance.new(class)
-    for k,v in pairs(props) do
-        if k ~= "Class" then inst[k] = v end
-    end
-    inst.Parent = parent
-    -- add UIStroke for text outline
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1
-    stroke.Color = DEFAULT_THEME.Accent
-    stroke.Parent = inst
-    registerRainbow(inst)
-    registerRainbow(stroke)
-    return inst
-end
-
 -- ======= Toast system (small animated popup) =======
 local function showToast(msg, duration, animateDots)
     duration = duration or 2.2
@@ -256,7 +180,6 @@ local function showToast(msg, duration, animateDots)
     toast.BorderSizePixel = 0
     toast.Parent = screenGui
     addRound(toast, UDim.new(0, 10))
-    local s = addStroke(toast, DEFAULT_THEME.Accent, 2); registerRainbow(s)
 
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, 0, 1, 0)
@@ -269,7 +192,6 @@ local function showToast(msg, duration, animateDots)
     label.TextYAlignment = Enum.TextYAlignment.Center
     label.Text = msg
     label.Parent = toast
-    registerRainbow(label)
 
     -- animate in
     tw(toast, {Position = UDim2.new(0.5, -150, 0.02, 0), Size = UDim2.new(0, 620, 0, 56)}, 0.22):Play()
@@ -308,9 +230,8 @@ main.Parent = screenGui
 addRound(main, DEFAULT_THEME.Radius)
 addStroke(main, Color3.fromRGB(0,0,0), 1)
 
--- main border stroke (rainbow)
+-- main border stroke
 local mainStroke = addStroke(main, DEFAULT_THEME.Accent, 2)
-registerRainbow(mainStroke)
 
 -- drop shadow
 if DEFAULT_THEME.Shadows then
@@ -332,7 +253,6 @@ header.Size = UDim2.new(1, 0, 0, 68)
 header.BackgroundColor3 = Settings.Theme and Settings.Theme.Panel or DEFAULT_THEME.Panel
 header.Parent = main
 addRound(header, UDim.new(0, 12))
-registerRainbow(addStroke(header, DEFAULT_THEME.Accent, 1))
 
 -- title and subtitle layout: move subtitle to the right of title for better visibility
 local title = Instance.new("TextLabel")
@@ -347,7 +267,6 @@ title.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = header
 local titleStroke = addStroke(title, DEFAULT_THEME.Accent, 1)
-registerRainbow(titleStroke); registerRainbow(title)
 
 local subtitle = Instance.new("TextLabel")
 subtitle.Name = "Subtitle"
@@ -360,7 +279,6 @@ subtitle.TextSize = 14
 subtitle.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
 subtitle.TextXAlignment = Enum.TextXAlignment.Left
 subtitle.Parent = header
-registerRainbow(addStroke(subtitle, DEFAULT_THEME.Accent, 1)); registerRainbow(subtitle)
 
 -- ======= Left sidebar =======
 local sidebar = Instance.new("Frame")
@@ -370,7 +288,6 @@ sidebar.Position = UDim2.new(0, 0, 0, 68)
 sidebar.BackgroundColor3 = Settings.Theme and Settings.Theme.Panel or DEFAULT_THEME.Panel
 sidebar.Parent = main
 addRound(sidebar, UDim.new(0, 12))
-registerRainbow(addStroke(sidebar, DEFAULT_THEME.Accent, 1))
 
 local sideLayout = Instance.new("UIListLayout")
 sideLayout.Padding = UDim.new(0, 8)
@@ -399,8 +316,7 @@ searchBox.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.T
 searchBox.Parent = sidebar
 addRound(searchBox, UDim.new(0, 8))
 addStroke(searchBox, Color3.fromRGB(0,0,0), 1)
-registerRainbow(addStroke(searchBox, DEFAULT_THEME.Accent, 1))
-registerRainbow(searchBox)
+
 
 -- Buttons holder (scrollable)
 local buttonsHolder = Instance.new("ScrollingFrame")
@@ -427,7 +343,6 @@ content.BackgroundColor3 = Settings.Theme and Settings.Theme.Panel or DEFAULT_TH
 content.Parent = main
 addRound(content, UDim.new(0, 12))
 addStroke(content, Color3.fromRGB(0,0,0), 1)
-registerRainbow(addStroke(content, DEFAULT_THEME.Accent, 1))
 
 local contentPadding = Instance.new("UIPadding")
 contentPadding.PaddingTop = UDim.new(0, 18)
@@ -445,7 +360,6 @@ pageTitle.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.T
 pageTitle.Text = "Welcome"
 pageTitle.TextXAlignment = Enum.TextXAlignment.Left
 pageTitle.Parent = content
-registerRainbow(addStroke(pageTitle, DEFAULT_THEME.Accent, 1)); registerRainbow(pageTitle)
 
 local pageArea = Instance.new("Frame")
 pageArea.Name = "PageArea"
@@ -518,7 +432,6 @@ local function createSidebarButton(titleText, order)
     btn.Parent = btnHolder
     addRound(btn, UDim.new(0, 10))
     addStroke(btn, Color3.fromRGB(0,0,0), 1)
-    registerRainbow(addStroke(btn, DEFAULT_THEME.Accent, 1))
 
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, -70, 1, 0)
@@ -530,10 +443,9 @@ local function createSidebarButton(titleText, order)
     label.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
     label.Text = titleText
     label.Parent = btn
-    -- rainbow text & stroke for label
+    -- text & stroke for label
     local lblStroke = addStroke(label, DEFAULT_THEME.Accent, 1)
-    registerRainbow(lblStroke)
-    registerRainbow(label)
+
 
     local sub = Instance.new("TextLabel")
     sub.Size = UDim2.new(1, -70, 1, 0)
@@ -545,7 +457,6 @@ local function createSidebarButton(titleText, order)
     sub.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
     sub.Text = "Open " .. titleText
     sub.Parent = btn
-    registerRainbow(sub)
 
     local accent = Instance.new("Frame")
     accent.Size = UDim2.new(0, 6, 1, -8)
@@ -555,7 +466,6 @@ local function createSidebarButton(titleText, order)
     accent.Parent = btn
     addRound(accent, UDim.new(0, 6))
     accent.Visible = false
-    registerRainbow(addStroke(accent, DEFAULT_THEME.Accent, 1))
 
     btn.MouseEnter:Connect(function()
         tw(btn, {BackgroundColor3 = Color3.fromRGB(22,22,28)}):Play()
@@ -597,7 +507,6 @@ local function createToggle(labelText, initial)
     lbl.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Parent = row
-    registerRainbow(lbl)
 
     local togg = Instance.new("Frame")
     togg.Size = UDim2.new(0, 58, 0, 28)
@@ -606,7 +515,6 @@ local function createToggle(labelText, initial)
     togg.BackgroundColor3 = Color3.fromRGB(40,40,46)
     addRound(togg, UDim.new(0, 14))
     togg.Parent = row
-    registerRainbow(addStroke(togg, DEFAULT_THEME.Accent, 1))
 
     local circle = Instance.new("Frame")
     circle.Size = UDim2.new(0, 24, 0, 24)
@@ -639,7 +547,7 @@ local function createToggle(labelText, initial)
     return row, function() return state end, setState
 end
 
--- ======= Action button helper (keeps original behaviour but text + stroke rainbow) =======
+-- ======= Action button helper =======
 local function createActionButton(textLabel, url)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 48)
@@ -657,8 +565,6 @@ local function createActionButton(textLabel, url)
     addRound(btn, UDim.new(0, 10))
     addStroke(btn, Color3.fromRGB(0,0,0), 1)
     local btnStroke = addStroke(btn, DEFAULT_THEME.Accent, 1)
-    registerRainbow(btnStroke)
-    registerRainbow(btn) -- animate the button text color as well
 
     local running = false
     btn.MouseButton1Click:Connect(function()
@@ -713,7 +619,6 @@ welcomeText.TextSize = 14
 welcomeText.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
 welcomeText.Text = "Welcome to the 01_ii SPT Hub, built from scratch, cleanest hub yet, most overpowered ever!! To begin using the hub, start with getting a base with the button below!"
 welcomeText.Parent = pageWelcome
-registerRainbow(addStroke(welcomeText, DEFAULT_THEME.Accent, 1)); registerRainbow(welcomeText)
 
 local getBaseBtn = createActionButton("Get Base", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Get%20Base%20V3.txt")
 getBaseBtn.LayoutOrder = 5
@@ -730,7 +635,6 @@ updatesHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THE
 updatesHeader.TextXAlignment = Enum.TextXAlignment.Left
 updatesHeader.Text = "Updates"
 updatesHeader.Parent = updatesPage
-registerRainbow(addStroke(updatesHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(updatesHeader)
 
 local updatesScroll = Instance.new("ScrollingFrame")
 updatesScroll.Size = UDim2.new(1, -12, 1, -36)
@@ -773,7 +677,6 @@ updatesLabel.Font = Enum.Font.Gotham
 updatesLabel.TextSize = 14
 updatesLabel.AutomaticSize = Enum.AutomaticSize.Y
 updatesLabel.Parent = updatesScroll
-registerRainbow(addStroke(updatesLabel, DEFAULT_THEME.Accent, 1)); registerRainbow(updatesLabel)
 
 updatesLabel:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
     updatesScroll.CanvasSize = UDim2.new(0, 0, 0, updatesLabel.AbsoluteSize.Y + 20)
@@ -791,7 +694,6 @@ infoHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.
 infoHeader.TextXAlignment = Enum.TextXAlignment.Left
 infoHeader.Text = "Hub Info"
 infoHeader.Parent = infoPage
-registerRainbow(addStroke(infoHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(infoHeader)
 
 local infoScroll = Instance.new("ScrollingFrame")
 infoScroll.Size = UDim2.new(1, -12, 1, -36)
@@ -847,7 +749,6 @@ infoLabel.Font = Enum.Font.Gotham
 infoLabel.TextSize = 14
 infoLabel.AutomaticSize = Enum.AutomaticSize.Y
 infoLabel.Parent = infoScroll
-registerRainbow(addStroke(infoLabel, DEFAULT_THEME.Accent, 1)); registerRainbow(infoLabel)
 
 infoLabel:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
     infoScroll.CanvasSize = UDim2.new(0, 0, 0, infoLabel.AbsoluteSize.Y + 20)
@@ -865,7 +766,6 @@ testHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.
 testHeader.TextXAlignment = Enum.TextXAlignment.Left
 testHeader.Text = "Test Scripts"
 testHeader.Parent = testPage
-registerRainbow(addStroke(testHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(testHeader)
 
 local testing = {
     {"OP NoCooldown V2", "https://pastefy.app/TKPBRXLV/raw"},
@@ -896,7 +796,6 @@ toolsHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME
 toolsHeader.TextXAlignment = Enum.TextXAlignment.Left
 toolsHeader.Text = "Tool Scripts"
 toolsHeader.Parent = toolsPage
-registerRainbow(addStroke(toolsHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(toolsHeader)
 
 local tools = {
     {"Get Tools", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Tool%20Grabber"},
@@ -922,14 +821,13 @@ pHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Tex
 pHeader.TextXAlignment = Enum.TextXAlignment.Left
 pHeader.Text = "Player Scripts"
 pHeader.Parent = playerPage
-registerRainbow(addStroke(pHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(pHeader)
 
 local playerScripts = {
     {"OP Respawn", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Respawn"},
     {"Target Aura", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Target%20Aura"},
     {"Loopbring", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Loopbring"},
     {"Damage", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/Damage"},
-    {"AntiLag (NotByMe)", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Anti-Lag"},
+    {"OP Anti-Lag", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/OP%20Anti-Lag"},
     {"Infinite Yield", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"},
 }
 for i,t in ipairs(playerScripts) do
@@ -948,7 +846,6 @@ oHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Tex
 oHeader.TextXAlignment = Enum.TextXAlignment.Left
 oHeader.Text = "Other Scripts"
 oHeader.Parent = otherPage
-registerRainbow(addStroke(oHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(oHeader)
 
 local otherScripts = {
     {"PermaDeath", "https://raw.githubusercontent.com/GlitcherTheHacker/Roblox-Scripts/refs/heads/main/PermaDeath"},
@@ -974,7 +871,6 @@ sHeader.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Tex
 sHeader.TextXAlignment = Enum.TextXAlignment.Left
 sHeader.Text = "Settings"
 sHeader.Parent = settingsPage
-registerRainbow(addStroke(sHeader, DEFAULT_THEME.Accent, 1)); registerRainbow(sHeader)
 
 local autoRow, getAutoState, setAutoState = createToggle("Auto Execute Hub on Rejoin", Settings.AutoExecute)
 autoRow.LayoutOrder = 2
@@ -1002,7 +898,6 @@ local function createSlider(labelText, min, max, initial)
     lbl.TextColor3 = Settings.Theme and Settings.Theme.Text or DEFAULT_THEME.Text
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Parent = row
-    registerRainbow(lbl)
 
     local valueLbl = Instance.new("TextLabel")
     valueLbl.Size = UDim2.new(0.4, -6, 0, 18)
@@ -1014,7 +909,6 @@ local function createSlider(labelText, min, max, initial)
     valueLbl.TextColor3 = Settings.Theme and Settings.Theme.Muted or DEFAULT_THEME.Muted
     valueLbl.TextXAlignment = Enum.TextXAlignment.Right
     valueLbl.Parent = row
-    registerRainbow(valueLbl)
 
     local bar = Instance.new("Frame")
     bar.Size = UDim2.new(1, 0, 0, 14)
@@ -1107,8 +1001,6 @@ local function addRestoreButton(text, callback, order)
     btn.LayoutOrder = order
     addRound(btn, UDim.new(0, 8))
     btn.MouseButton1Click:Connect(callback)
-    registerRainbow(addStroke(btn, DEFAULT_THEME.Accent, 1))
-    registerRainbow(btn)
 end
 
 addRestoreButton("Restore WalkSpeed", function() setWalkVal(16) end, 30)
@@ -1122,8 +1014,6 @@ rejoinBtn.TextSize = 14
 rejoinBtn.Parent = settingsPage
 rejoinBtn.LayoutOrder = 40
 addRound(rejoinBtn, UDim.new(0, 8))
-registerRainbow(addStroke(rejoinBtn, DEFAULT_THEME.Accent, 1))
-registerRainbow(rejoinBtn)
 
 rejoinBtn.MouseButton1Click:Connect(function()
     local TeleportService = game:GetService("TeleportService")
@@ -1266,12 +1156,6 @@ if screenGui and main and toggleHub then
     stroke.Thickness = 2
     stroke.Color = Color3.fromRGB(255,0,0)
     stroke.Parent = toggleButton
-
-    -- Register rainbow animation
-    if registerRainbow then
-        registerRainbow(toggleButton)
-        registerRainbow(stroke)
-    end
 
     -- Hub Toggle
     toggleButton.MouseButton1Click:Connect(function()
