@@ -1,4 +1,4 @@
--- ⚡ USE TOOLS ⚡
+-- ⚡ ANIM USE TOOLS ⚡
 
 ----------------------------------------------------------------
 -- SERVICES
@@ -11,11 +11,11 @@ local player     = Players.LocalPlayer
 ----------------------------------------------------------------
 -- CONFIG — SAFE POWER LIMITS
 ----------------------------------------------------------------
-local ACTIVATIONS_PER_SECOND = 100   -- per tool (safe cap)
-local EQUIP_REFRESH_RATE     = 0.25 -- ensure re-equip every quarter second
+local ACTIVATIONS_PER_SECOND = 100
+local EQUIP_REFRESH_RATE     = 0.25
 
 ----------------------------------------------------------------
--- UI — BLACK + RAINBOW
+-- UI — CLEAN BLACK & WHITE
 ----------------------------------------------------------------
 local gui = Instance.new("ScreenGui")
 gui.Name = "AnimUseTools"
@@ -27,11 +27,11 @@ local toggle = Instance.new("TextButton")
 toggle.Size = UDim2.new(0,165,0,65)
 toggle.AnchorPoint = Vector2.new(1,0.5)
 toggle.Position = UDim2.new(1,-30,0.6,0)
-toggle.BackgroundColor3 = Color3.fromRGB(0,0,0)
+toggle.BackgroundColor3 = Color3.fromRGB(0,0,0) -- black UI
 toggle.Text = "AnimTools: OFF"
 toggle.TextSize = 22
 toggle.Font = Enum.Font.GothamBold
-toggle.TextColor3 = Color3.new(1,1,1)
+toggle.TextColor3 = Color3.fromRGB(255,255,255) -- white text
 toggle.BorderSizePixel = 0
 toggle.Active = true
 toggle.Draggable = true
@@ -42,18 +42,8 @@ corner.CornerRadius = UDim.new(0.35,0)
 
 local outline = Instance.new("UIStroke", toggle)
 outline.Thickness = 2.8
+outline.Color = Color3.fromRGB(255,255,255) -- static white outline
 outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-
-task.spawn(function()
-	local t = 0
-	while true do
-		t += .015
-		local col = Color3.fromHSV(t % 1,1,1)
-		outline.Color = col
-		toggle.TextColor3 = col
-		task.wait()
-	end
-end)
 
 ----------------------------------------------------------------
 -- STATE
@@ -107,7 +97,7 @@ local function activateTools()
 end
 
 ----------------------------------------------------------------
--- MAIN LOOP — PACED BURST ENGINE
+-- MAIN LOOP
 ----------------------------------------------------------------
 
 local lastPulse = 0
@@ -117,14 +107,12 @@ RunService.Heartbeat:Connect(function(dt)
 
 	if not active then return end
 
-	-- Equip refresh (stability safety)
 	equipTick += dt
 	if equipTick >= EQUIP_REFRESH_RATE then
 		equipTick = 0
 		equipAll()
 	end
 
-	-- Activation pulse limiter
 	if (tick() - lastPulse) >= pulseDelay then
 		lastPulse = tick()
 		activateTools()
@@ -133,11 +121,10 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 ----------------------------------------------------------------
--- TOGGLE + INPUT
+-- TOGGLE
 ----------------------------------------------------------------
 
 local function toggleState()
-
 	active = not active
 	updateButton()
 
@@ -146,7 +133,6 @@ local function toggleState()
 	else
 		unequipTools()
 	end
-
 end
 
 toggle.MouseButton1Click:Connect(toggleState)
@@ -163,19 +149,8 @@ end)
 
 player.CharacterAdded:Connect(function()
 	task.wait(.1)
-
-	if active then
-		equipAll()
-	else
-		unequipTools()
-	end
-
+	if active then equipAll() else unequipTools() end
 end)
 
-----------------------------------------------------------------
--- INIT
-----------------------------------------------------------------
-
 updateButton()
-
-print("⚔️ USE TOOLS INITILIZED")
+print("⚔️ ANIM USE TOOLS — INITILIZED")
