@@ -75,10 +75,9 @@ table.insert(getgenv().configs.connections, Disable.Event:Connect(function()
     Run = false
 end))
 
--- UI (Black Background + Rainbow Accent Theme)
-local function RainbowColor(t)
-    return Color3.fromHSV((tick() * 0.2 + t) % 1, 1, 1)
-end
+-- ============================
+-- CLEAN BLACK & WHITE UI
+-- ============================
 
 local ScreenGui = Instance.new("ScreenGui", PlayerGui)
 ScreenGui.Name = "AuraGui"
@@ -89,18 +88,18 @@ AuraBtn.Name = "AuraToggle"
 AuraBtn.Size = UDim2.new(0, 70, 0, 28)
 AuraBtn.Position = UDim2.new(1, -150, 0, 10)
 AuraBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-AuraBtn.TextColor3 = RainbowColor(0)
+AuraBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 AuraBtn.Text = "AURA"
 AuraBtn.TextSize = 14
 AuraBtn.BorderSizePixel = 2
-AuraBtn.BorderColor3 = RainbowColor(0)
+AuraBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
 
 local PlayerFrame = Instance.new("Frame", ScreenGui)
 PlayerFrame.Size = UDim2.new(0, 140, 0, 300)
 PlayerFrame.Position = UDim2.new(1, -150, 0, 45)
 PlayerFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 PlayerFrame.BorderSizePixel = 2
-PlayerFrame.BorderColor3 = RainbowColor(.3)
+PlayerFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
 PlayerFrame.Visible = false
 
 local UIListLayout = Instance.new("UIListLayout", PlayerFrame)
@@ -117,10 +116,10 @@ local function UpdatePlayers()
             local btn = Instance.new("TextButton")
             btn.Size = UDim2.new(1, -10, 0, 24)
             btn.Text = plr.Name
-            btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-            btn.TextColor3 = RainbowColor(0)
+            btn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
             btn.BorderSizePixel = 2
-            btn.BorderColor3 = RainbowColor(.2)
+            btn.BorderColor3 = Color3.fromRGB(255, 255, 255)
             btn.Parent = PlayerFrame
             btn.TextSize = 13
 
@@ -129,16 +128,16 @@ local function UpdatePlayers()
                 local found = table.find(list, plr)
                 if found then
                     table.remove(list, found)
-                    btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                    btn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
                 else
                     table.insert(list, plr)
-                    btn.BackgroundColor3 = Color3.fromRGB(0, 80, 0)
+                    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
                 end
             end)
 
             for _, t in ipairs(getgenv().configs.TargetList) do
                 if t == plr then
-                    btn.BackgroundColor3 = Color3.fromRGB(0, 80, 0)
+                    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
                     break
                 end
             end
