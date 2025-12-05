@@ -1,4 +1,4 @@
--- Loopbring GUI
+-- Loopbring GUI (Black & White Minimal Edition)
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local bringTargets = {}
@@ -11,30 +11,19 @@ gui.ResetOnSpawn = false
 gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 -- Colors
-local baseColor = Color3.fromRGB(0, 0, 0)
-local rainbowStroke = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
-	ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 127, 0)),
-	ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 255, 0)),
-	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(0, 255, 0)),
-	ColorSequenceKeypoint.new(0.8, Color3.fromRGB(0, 127, 255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(170, 0, 255))
-})
+local BG_COLOR = Color3.fromRGB(0, 0, 0)
+local TEXT_COLOR = Color3.fromRGB(255, 255, 255)
+local HIGHLIGHT_COLOR = Color3.fromRGB(255, 255, 255)
+local GREEN = Color3.fromRGB(0, 255, 0)
 
 local function applyStroke(obj, thickness)
 	local stroke = Instance.new("UIStroke", obj)
 	stroke.Thickness = thickness
-	stroke.Color = Color3.fromRGB(255, 0, 200)
-	stroke.Color = Color3.fromHSV(tick() % 1, 1, 1) -- live rainbow effect
-	task.spawn(function()
-		while stroke and stroke.Parent do
-			stroke.Color = Color3.fromHSV((tick()*0.35) % 1, 1, 1)
-			task.wait(0.05)
-		end
-	end)
+	stroke.Color = TEXT_COLOR
+	return stroke
 end
 
--- Toggle Button (floating orb)
+-- Toggle Button
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Parent = gui
 toggleBtn.Size = UDim2.new(0, 46, 0, 46)
@@ -42,22 +31,20 @@ toggleBtn.Position = UDim2.new(1, -70, 0, 120)
 toggleBtn.Text = "⇩"
 toggleBtn.TextScaled = true
 toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.BackgroundColor3 = baseColor
-toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-
+toggleBtn.BackgroundColor3 = BG_COLOR
+toggleBtn.TextColor3 = TEXT_COLOR
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
-applyStroke(toggleBtn, 3)
+applyStroke(toggleBtn, 2)
 
 -- Main Frame
 local frame = Instance.new("Frame")
 frame.Parent = gui
 frame.Position = UDim2.new(1, -280, 0, 170)
 frame.Size = UDim2.new(0, 240, 0, 280)
-frame.BackgroundColor3 = baseColor
+frame.BackgroundColor3 = BG_COLOR
 frame.Visible = false
-
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 14)
-applyStroke(frame, 3)
+applyStroke(frame, 2)
 
 -- Header
 local header = Instance.new("Frame", frame)
@@ -69,16 +56,16 @@ minusBtn.Size = UDim2.new(0, 40, 1, 0)
 minusBtn.Text = "-"
 minusBtn.Font = Enum.Font.GothamBold
 minusBtn.TextScaled = true
-minusBtn.BackgroundColor3 = baseColor
-minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minusBtn.BackgroundColor3 = BG_COLOR
+minusBtn.TextColor3 = TEXT_COLOR
 Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0, 8)
-applyStroke(minusBtn, 2)
+applyStroke(minusBtn, 1)
 
 local distanceLabel = Instance.new("TextLabel", header)
 distanceLabel.Size = UDim2.new(1, -80, 1, 0)
 distanceLabel.Position = UDim2.new(0, 40, 0, 0)
 distanceLabel.Text = "Distance: " .. distance
-distanceLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+distanceLabel.TextColor3 = TEXT_COLOR
 distanceLabel.TextScaled = true
 distanceLabel.Font = Enum.Font.GothamBold
 distanceLabel.BackgroundTransparency = 1
@@ -99,7 +86,7 @@ scroll.ScrollBarThickness = 4
 local layout = Instance.new("UIListLayout", scroll)
 layout.Padding = UDim.new(0, 4)
 
--- Core Logic (Character-only bring)
+-- Core Logic
 local function hideNonCharacterItems(char)
 	for _, item in ipairs(char:GetChildren()) do
 		if item:IsA("Tool") or item:IsA("Accessory") or item:IsA("Hat") or item:IsA("Model") then
@@ -129,6 +116,7 @@ end
 local function loopBring(name)
 	if table.find(bringTargets, name) then return end
 	table.insert(bringTargets, name)
+
 	coroutine.wrap(function()
 		while table.find(bringTargets, name) do
 			updateTeleportation()
@@ -142,11 +130,12 @@ local function stopBring(name)
 	if i then table.remove(bringTargets, i) end
 end
 
--- Player List Refresh
+-- List Builder
 local function refreshList()
 	for _, c in ipairs(scroll:GetChildren()) do
 		if c:IsA("TextButton") then c:Destroy() end
 	end
+
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p ~= LocalPlayer then
 			local btn = Instance.new("TextButton")
@@ -155,13 +144,11 @@ local function refreshList()
 			btn.Text = p.Name
 			btn.Font = Enum.Font.Gotham
 			btn.TextScaled = true
-			btn.BackgroundColor3 = baseColor
-			btn.TextColor3 = table.find(bringTargets, p.Name)
-				and Color3.fromRGB(255, 255, 255)
-				or Color3.fromRGB(0, 255, 0)
+			btn.BackgroundColor3 = BG_COLOR
+			btn.TextColor3 = table.find(bringTargets, p.Name) and HIGHLIGHT_COLOR or GREEN
 
 			Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
-			applyStroke(btn, 2)
+			applyStroke(btn, 1)
 
 			btn.MouseButton1Click:Connect(function()
 				if table.find(bringTargets, p.Name) then
@@ -173,6 +160,7 @@ local function refreshList()
 			end)
 		end
 	end
+
 	scroll.CanvasSize = UDim2.new(0, 0, 0, #Players:GetPlayers() * 36)
 end
 
@@ -183,9 +171,20 @@ Players.PlayerRemoving:Connect(function(p)
 end)
 
 -- Dragging
-local dragging, dragInput, dragStart, startPos
+local dragging, dragStart, startPos
 
-local function updatePosition(input)
+toggleBtn.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPos = toggleBtn.Position
+	end
+	input.Changed:Connect(function()
+		if input.UserInputState == Enum.UserInputState.End then dragging = false end
+	end)
+end)
+
+toggleBtn.InputChanged:Connect(function(input)
 	if dragging then
 		local delta = input.Position - dragStart
 		toggleBtn.Position = UDim2.new(
@@ -197,31 +196,22 @@ local function updatePosition(input)
 			0, toggleBtn.AbsolutePosition.Y
 		)
 	end
-end
-
-toggleBtn.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true
-		dragStart = input.Position
-		startPos = toggleBtn.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then dragging = false end
-		end)
-	end
 end)
-toggleBtn.InputChanged:Connect(updatePosition)
 
--- UI Hook
+-- UI Hooks
 toggleBtn.MouseButton1Click:Connect(function()
 	frame.Visible = not frame.Visible
 end)
+
 plusBtn.MouseButton1Click:Connect(function()
 	distance += 1
 	distanceLabel.Text = "Distance: " .. distance
 end)
+
 minusBtn.MouseButton1Click:Connect(function()
 	distance = math.max(1, distance - 1)
 	distanceLabel.Text = "Distance: " .. distance
 end)
 
+-- Init
 refreshList()
