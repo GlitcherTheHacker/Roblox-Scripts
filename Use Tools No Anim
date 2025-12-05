@@ -1,4 +1,4 @@
--- ⚡ USE TOOLS ⚡
+-- ⚡ USE TOOLS NO ANIM ⚡
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -18,12 +18,13 @@ local toggle = Instance.new("TextButton")
 toggle.Size = UDim2.new(0, 165, 0, 65)
 toggle.AnchorPoint = Vector2.new(1, 0.5)
 toggle.Position = UDim2.new(1, -30, 0.5, 0)
-toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+toggle.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- white UI
 toggle.Text = "NoAnimTools: OFF"
 toggle.TextSize = 22
 toggle.Font = Enum.Font.GothamBold
-toggle.TextColor3 = Color3.new(1, 1, 1)
-toggle.BorderSizePixel = 0
+toggle.TextColor3 = Color3.fromRGB(0, 0, 0) -- black text
+toggle.BorderSizePixel = 2
+toggle.BorderColor3 = Color3.fromRGB(0,0,0) -- solid black border
 toggle.Active = true
 toggle.Draggable = true
 toggle.Parent = gui
@@ -31,26 +32,11 @@ toggle.Parent = gui
 local corner = Instance.new("UICorner", toggle)
 corner.CornerRadius = UDim.new(0.35, 0)
 
--- RAINBOW OUTLINE EFFECT
+-- static outline
 local outline = Instance.new("UIStroke", toggle)
 outline.Thickness = 2.8
-outline.Color = Color3.fromRGB(255, 0, 255)
+outline.Color = Color3.fromRGB(0,0,0) -- black
 outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-
--- RAINBOW ANIMATION THREAD
-task.spawn(function()
-	local t = 0
-	while true do
-		t += 0.015
-		local r = (math.sin(t) * .5 + .5)
-		local g = (math.sin(t + 2) * .5 + .5)
-		local b = (math.sin(t + 4) * .5 + .5)
-		local col = Color3.new(r, g, b)
-		outline.Color = col
-		toggle.TextColor3 = col
-		task.wait()
-	end
-end)
 
 -- === STATE ===
 local active = false
@@ -59,12 +45,12 @@ local loopRunning = false
 local function updateButton()
 	if active then
 		toggle.Text = "NoAnimTools: ON"
-		toggle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		toggle.TextColor3 = Color3.fromRGB(0, 0, 0)
+		toggle.BackgroundColor3 = Color3.fromRGB(255,255,255)
+		toggle.TextColor3 = Color3.fromRGB(0,0,0)
 	else
 		toggle.Text = "NoAnimTools: OFF"
-		toggle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+		toggle.BackgroundColor3 = Color3.fromRGB(255,255,255)
+		toggle.TextColor3 = Color3.fromRGB(0,0,0)
 	end
 end
 
@@ -72,7 +58,7 @@ end
 local function equipAllTools()
 	local char = player.Character
 	if not char then return end
-	local backpack = player:FindFirstChild("Backpack")
+	local backpack = player.Backpack
 	if backpack then
 		for _, tool in ipairs(backpack:GetChildren()) do
 			if tool:IsA("Tool") then
@@ -85,7 +71,7 @@ end
 local function unequipAllTools()
 	local char = player.Character
 	if not char then return end
-	local backpack = player:FindFirstChild("Backpack")
+	local backpack = player.Backpack
 	if backpack then
 		for _, tool in ipairs(char:GetChildren()) do
 			if tool:IsA("Tool") then
@@ -99,6 +85,7 @@ end
 local function toolLoop()
 	if loopRunning then return end
 	loopRunning = true
+
 	task.spawn(function()
 		while true do
 			if active then
@@ -114,28 +101,30 @@ local function toolLoop()
 					end
 				end
 			end
-			PostSim:Wait() -- Subframe precision tick
+			PostSim:Wait()
 		end
 	end)
 end
 
--- === TOGGLE FUNCTIONALITY ===
+-- === TOGGLE ===
 local function toggleState()
 	active = not active
 	updateButton()
+
 	if active then
 		equipAllTools()
 	else
-		unequipAllTools() -- Instantly unequip all tools when toggled off
+		unequipAllTools()
 	end
+
 	if not loopRunning then
 		toolLoop()
 	end
 end
 
--- === INPUT BINDINGS ===
 toggle.MouseButton1Click:Connect(toggleState)
-UIS.InputBegan:Connect(function(input, gp)
+
+UIS.InputBegan:Connect(function(input,gp)
 	if not gp and input.KeyCode == Enum.KeyCode.Q then
 		toggleState()
 	end
@@ -143,17 +132,11 @@ end)
 
 -- === CHARACTER HANDLER ===
 player.CharacterAdded:Connect(function(char)
-	char:WaitForChild("HumanoidRootPart", 3)
-	if active then
-		task.wait(0.1)
-		equipAllTools()
-	else
-		task.wait(0.1)
-		unequipAllTools()
-	end
+	task.wait(0.1)
+	if active then equipAllTools() else unequipAllTools() end
 end)
 
--- === INIT ===
 updateButton()
 toolLoop()
-print("⚙️ USE TOOLS — Initialized")
+
+print("⚙️ NO ANIM USE TOOLS — INITILIZED")
