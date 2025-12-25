@@ -1,110 +1,330 @@
--- Word Ability Spammer
+-- ===============================
+-- WORD SPAM GUI RENDERER
 -- Uses PixelFont.json
+-- ===============================
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 
--- =====================
+-- ===============================
 -- CONFIG
--- =====================
+-- ===============================
 
-local WORD = "HELLO"
-local PIXEL_SIZE = 2.5        -- spacing between pixels
-local LETTER_SPACING = 2      -- space between letters
-local FIRE_DELAY = 0.02       -- delay between each pixel fire
-
--- Position mode
-local USE_CHARACTER_POSITION = true
-local CUSTOM_ORIGIN = Vector3.new(0, 10, 0)
-
--- Tool config
 local TOOL_NAME = "Axe Smash"
 local REMOTE_NAME = "Remote"
 
--- =====================
--- LOAD FONT
--- =====================
+local PIXEL_SIZE = 2.5
+local LETTER_SPACING = 2
+local FIRE_DELAY = 0.02
+
+-- Fixed world location (behind bases)
+local WORD_ORIGIN = Vector3.new(262.423, 6, 340)
+
+-- ===============================
+-- LOAD FONT FILE
+-- ===============================
 
 local Font = HttpService:JSONDecode(readfile("PixelFont.json"))
 
--- =====================
--- TOOL / REMOTE FIND
--- =====================
+-- ===============================
+-- TOOL / REMOTE
+-- ===============================
 
 local function getRemote()
-    local char = player.Character
-    if not char then return end
+	local char = player.Character
+	if not char then return end
 
-    local tool = char:FindFirstChild(TOOL_NAME)
-        or player.Backpack:FindFirstChild(TOOL_NAME)
+	local tool = char:FindFirstChild(TOOL_NAME)
+		or player.Backpack:FindFirstChild(TOOL_NAME)
 
-    if not tool then return end
+	if not tool then return end
 
-    return tool:FindFirstChild(REMOTE_NAME)
-        or tool:FindFirstChildWhichIsA("RemoteEvent")
+	return tool:FindFirstChild(REMOTE_NAME)
+		or tool:FindFirstChildWhichIsA("RemoteEvent")
 end
-
--- =====================
--- FIRE ABILITY
--- =====================
 
 local function fireAt(pos)
-    local remote = getRemote()
-    if remote then
-        pcall(function()
-            remote:FireServer(CFrame.new(pos))
-        end)
-    end
+	local remote = getRemote()
+	if remote then
+		pcall(function()
+			remote:FireServer(CFrame.new(pos))
+		end)
+	end
 end
 
--- =====================
--- RENDER WORD
--- =====================
+-- ===============================
+-- RENDER ENGINE
+-- ===============================
 
-local function getOrigin()
-    if USE_CHARACTER_POSITION and player.Character then
-        local root = player.Character:FindFirstChild("HumanoidRootPart")
-        if root then
-            return root.Position + Vector3.new(0, 6, 0)
-        end
-    end
-    return CUSTOM_ORIGIN
+local spamming = false
+local currentWord = "HELLO"
+
+local function renderWord()
+	while spamming do
+		local cursorX = 0
+		local origin = WORD_ORIGIN
+
+		for char in currentWord:upper():gmatch(".") do
+			if char == " " then
+				cursorX += 4
+			else
+				local grid = Font[char]
+				if grid then
+					for y = 1, #grid do
+						for x = 1, #grid[y] do
+							if grid[y]:sub(x, x) == "1" then
+								local pos = origin + Vector3.new(
+									(cursorX + x) * PIXEL_SIZE,
+									-y * PIXEL_SIZE,
+									0
+								)
+								fireAt(pos)
+								task.wait(FIRE_DELAY)
+							end
+						end
+					end
+					cursorX += #grid[1] + LETTER_SPACING
+				end
+			end
+		end
+
+		task.wait(0.1)
+	end
 end
 
-local function renderWord(text)
-    local origin = getOrigin()
-    local cursorX = 0
+-- ===============================
+-- GUI
+-- ===============================
 
-    text = text:upper()
+local gui = Instance.new("ScreenGui")
+gui.Name = "WordSpamGUI"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
 
-    for char in text:gmatch(".") do
-        local grid = Font[char]
-        if grid then
-            for y = 1, #grid do
-                for x = 1, #grid[y] do
-                    if grid[y]:sub(x, x) == "1" then
-                        local pos = origin
-                            + Vector3.new(
-                                (cursorX + x) * PIXEL_SIZE,
-                                -y * PIXEL_SIZE,
-                                0
-                            )
-                        fireAt(pos)
-                        task.wait(FIRE_DELAY)
-                    end
-                end
-            end
-            cursorX += #grid[1] + LETTER_SPACING
-        else
-            cursorX += 4
-        end
-    end
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 260, 0, 140)
+frame.Position = UDim2.new(0, 20, 0, 200)
+frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+frame.BackgroundTransparency = 0.15
+frame.BorderSizePixel = 0
+
+local corner = Instance.new("UICorner", frame)
+corner.CornerRadius = UDim.new(0, 10)
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundTransparency = 1
+title.Text = "WORD SPAMMER"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextColor3 = Color3.fromRGB(230, 230, 230)
+
+local box = Instance.new("TextBox", frame)
+box.Size = UDim2.new(1, -20, 0, 30)
+box.Position = UDim2.new(0, 10, 0, 40)
+box.PlaceholderText = "Enter word here"
+box.Text = currentWord
+box.Font = Enum.Font.Gotham
+box.TextSize = 14
+box.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+box.TextColor3 = Color3.fromRGB(255, 255, 255)
+box.ClearTextOnFocus = false
+
+local button = Instance.new("TextButton", frame)
+button.Size = UDim2.new(1, -20, 0, 34)
+button.Position = UDim2.new(0, 10, 0, 82)
+button.Text = "SPAM: OFF"
+button.Font = Enum.Font.GothamBold
+button.TextSize = 14
+button.BackgroundColor3 = Color3.fromRGB(90, 40, 40)
+button.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+-- ===============================
+-- GUI LOGIC
+-- ===============================
+
+box:GetPropertyChangedSignal("Text"):Connect(function()
+	currentWord = box.Text
+end)
+
+button.MouseButton1Click:Connect(function()
+	spamming = not spamming
+	button.Text = spamming and "SPAM: ON" or "SPAM: OFF"
+	button.BackgroundColor3 = spamming
+		and Color3.fromRGB(40, 120, 60)
+		or Color3.fromRGB(90, 40, 40)
+
+	if spamming then
+		task.spawn(renderWord)
+	end
+end)
+
+print("✅ Word Spam GUI ready. Anchored behind bases.")
+-- ===============================
+-- WORD SPAM GUI RENDERER
+-- Uses PixelFont.json
+-- ===============================
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+-- ===============================
+-- CONFIG
+-- ===============================
+
+local TOOL_NAME = "Axe Smash"
+local REMOTE_NAME = "Remote"
+
+local PIXEL_SIZE = 2.5
+local LETTER_SPACING = 2
+local FIRE_DELAY = 0.02
+
+-- Fixed world location (behind bases)
+local WORD_ORIGIN = Vector3.new(262.423, 6, 340)
+
+-- ===============================
+-- LOAD FONT FILE
+-- ===============================
+
+local Font = HttpService:JSONDecode(readfile("PixelFont.json"))
+
+-- ===============================
+-- TOOL / REMOTE
+-- ===============================
+
+local function getRemote()
+	local char = player.Character
+	if not char then return end
+
+	local tool = char:FindFirstChild(TOOL_NAME)
+		or player.Backpack:FindFirstChild(TOOL_NAME)
+
+	if not tool then return end
+
+	return tool:FindFirstChild(REMOTE_NAME)
+		or tool:FindFirstChildWhichIsA("RemoteEvent")
 end
 
--- =====================
--- EXECUTE
--- =====================
+local function fireAt(pos)
+	local remote = getRemote()
+	if remote then
+		pcall(function()
+			remote:FireServer(CFrame.new(pos))
+		end)
+	end
+end
 
-renderWord(WORD)
+-- ===============================
+-- RENDER ENGINE
+-- ===============================
+
+local spamming = false
+local currentWord = "HELLO"
+
+local function renderWord()
+	while spamming do
+		local cursorX = 0
+		local origin = WORD_ORIGIN
+
+		for char in currentWord:upper():gmatch(".") do
+			if char == " " then
+				cursorX += 4
+			else
+				local grid = Font[char]
+				if grid then
+					for y = 1, #grid do
+						for x = 1, #grid[y] do
+							if grid[y]:sub(x, x) == "1" then
+								local pos = origin + Vector3.new(
+									(cursorX + x) * PIXEL_SIZE,
+									-y * PIXEL_SIZE,
+									0
+								)
+								fireAt(pos)
+								task.wait(FIRE_DELAY)
+							end
+						end
+					end
+					cursorX += #grid[1] + LETTER_SPACING
+				end
+			end
+		end
+
+		task.wait(0.1)
+	end
+end
+
+-- ===============================
+-- GUI
+-- ===============================
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "WordSpamGUI"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 260, 0, 140)
+frame.Position = UDim2.new(0, 20, 0, 200)
+frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+frame.BackgroundTransparency = 0.15
+frame.BorderSizePixel = 0
+
+local corner = Instance.new("UICorner", frame)
+corner.CornerRadius = UDim.new(0, 10)
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundTransparency = 1
+title.Text = "WORD SPAMMER"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextColor3 = Color3.fromRGB(230, 230, 230)
+
+local box = Instance.new("TextBox", frame)
+box.Size = UDim2.new(1, -20, 0, 30)
+box.Position = UDim2.new(0, 10, 0, 40)
+box.PlaceholderText = "Enter word here"
+box.Text = currentWord
+box.Font = Enum.Font.Gotham
+box.TextSize = 14
+box.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+box.TextColor3 = Color3.fromRGB(255, 255, 255)
+box.ClearTextOnFocus = false
+
+local button = Instance.new("TextButton", frame)
+button.Size = UDim2.new(1, -20, 0, 34)
+button.Position = UDim2.new(0, 10, 0, 82)
+button.Text = "SPAM: OFF"
+button.Font = Enum.Font.GothamBold
+button.TextSize = 14
+button.BackgroundColor3 = Color3.fromRGB(90, 40, 40)
+button.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+-- ===============================
+-- GUI LOGIC
+-- ===============================
+
+box:GetPropertyChangedSignal("Text"):Connect(function()
+	currentWord = box.Text
+end)
+
+button.MouseButton1Click:Connect(function()
+	spamming = not spamming
+	button.Text = spamming and "SPAM: ON" or "SPAM: OFF"
+	button.BackgroundColor3 = spamming
+		and Color3.fromRGB(40, 120, 60)
+		or Color3.fromRGB(90, 40, 40)
+
+	if spamming then
+		task.spawn(renderWord)
+	end
+end)
+
+print("✅ Word Spam GUI ready. Anchored behind bases.")
