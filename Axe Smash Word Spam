@@ -1,0 +1,110 @@
+-- Word Ability Spammer
+-- Uses PixelFont.json
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+
+local player = Players.LocalPlayer
+
+-- =====================
+-- CONFIG
+-- =====================
+
+local WORD = "HELLO"
+local PIXEL_SIZE = 2.5        -- spacing between pixels
+local LETTER_SPACING = 2      -- space between letters
+local FIRE_DELAY = 0.02       -- delay between each pixel fire
+
+-- Position mode
+local USE_CHARACTER_POSITION = true
+local CUSTOM_ORIGIN = Vector3.new(0, 10, 0)
+
+-- Tool config
+local TOOL_NAME = "Axe Smash"
+local REMOTE_NAME = "Remote"
+
+-- =====================
+-- LOAD FONT
+-- =====================
+
+local Font = HttpService:JSONDecode(readfile("PixelFont.json"))
+
+-- =====================
+-- TOOL / REMOTE FIND
+-- =====================
+
+local function getRemote()
+    local char = player.Character
+    if not char then return end
+
+    local tool = char:FindFirstChild(TOOL_NAME)
+        or player.Backpack:FindFirstChild(TOOL_NAME)
+
+    if not tool then return end
+
+    return tool:FindFirstChild(REMOTE_NAME)
+        or tool:FindFirstChildWhichIsA("RemoteEvent")
+end
+
+-- =====================
+-- FIRE ABILITY
+-- =====================
+
+local function fireAt(pos)
+    local remote = getRemote()
+    if remote then
+        pcall(function()
+            remote:FireServer(CFrame.new(pos))
+        end)
+    end
+end
+
+-- =====================
+-- RENDER WORD
+-- =====================
+
+local function getOrigin()
+    if USE_CHARACTER_POSITION and player.Character then
+        local root = player.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            return root.Position + Vector3.new(0, 6, 0)
+        end
+    end
+    return CUSTOM_ORIGIN
+end
+
+local function renderWord(text)
+    local origin = getOrigin()
+    local cursorX = 0
+
+    text = text:upper()
+
+    for char in text:gmatch(".") do
+        local grid = Font[char]
+        if grid then
+            for y = 1, #grid do
+                for x = 1, #grid[y] do
+                    if grid[y]:sub(x, x) == "1" then
+                        local pos = origin
+                            + Vector3.new(
+                                (cursorX + x) * PIXEL_SIZE,
+                                -y * PIXEL_SIZE,
+                                0
+                            )
+                        fireAt(pos)
+                        task.wait(FIRE_DELAY)
+                    end
+                end
+            end
+            cursorX += #grid[1] + LETTER_SPACING
+        else
+            cursorX += 4
+        end
+    end
+end
+
+-- =====================
+-- EXECUTE
+-- =====================
+
+renderWord(WORD)
